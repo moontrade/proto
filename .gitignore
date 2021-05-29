@@ -4,6 +4,10 @@
 *.dll
 *.so
 *.dylib
+.idea
+
+node_modules/
+build/
 
 # Test binary, built with `go test -c`
 *.test

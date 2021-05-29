@@ -1,0 +1,9 @@
+package order
+
+import (
+	moontrade.pricing
+)
+
+struct Order {
+	candle pricing.Candle
+}
