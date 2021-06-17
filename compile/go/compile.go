@@ -1,11 +1,13 @@
 package _go
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	. "github.com/moontrade/proto/schema"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -31,21 +33,38 @@ func (c *Compiler) Compile() error {
 	}
 
 	path := c.schema.Config.Path
-	err = filepath.Walk(path, c.walkClear)
-	for _, f := range packages {
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	output := RelativePath(path, c.config.Output)
+	_ = os.MkdirAll(output, 0755)
+	info, err := os.Stat(output)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("output directory '%s' is not a directory", output)
+	}
+	//output := filepath.Join(path, c.config.Output)
+	createFile := func(f *goPackage, order binary.ByteOrder) error {
 		b := NewBuilder()
-		if err := c.writeFile(f, b); err != nil {
+		if err := c.writeFile(f, b, order); err != nil {
 			return err
 		}
 
 		// Compute dir path
-		dir := filepath.Join(path, f.path)
+		dir := filepath.Join(output, f.path)
 
 		// mkdir
 		_ = os.MkdirAll(dir, 0755)
 
+		name, err := filepath.Abs(filepath.Join(dir, goFileName(order)))
+		if err != nil {
+			return err
+		}
 		// Create new "moon.go"
-		out, err := os.Create(filepath.Join(dir, GoFileName))
+		out, err := os.Create(name)
 		if err != nil {
 			return err
 		}
@@ -53,13 +72,41 @@ func (c *Compiler) Compile() error {
 		if err != nil {
 			return err
 		}
+
+		if err = out.Sync(); err != nil {
+			return err
+		}
+		if err = out.Close(); err != nil {
+			return err
+		}
+
+		if !c.config.NoGoFmt {
+			err = exec.Command("gofmt", "-w", name).Run()
+			if err != nil {
+
+			}
+		}
+		return nil
+	}
+	err = filepath.Walk(path, c.walkClear)
+	for _, f := range packages {
+		if err = createFile(f, binary.LittleEndian); err != nil {
+			return err
+		}
+		if c.config.BigEndian {
+			if err = createFile(f, binary.BigEndian); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
 }
 
 func (c *Compiler) walkClear(path string, info fs.FileInfo, err error) error {
-	if strings.HasSuffix(path, GoFileNameSuffix) {
+	if strings.HasSuffix(path, "proto_be.go") {
+		_ = os.Remove(path)
+	} else if strings.HasSuffix(path, "proto.go") {
 		_ = os.Remove(path)
 	}
 	return nil
@@ -109,8 +156,7 @@ func joinWithSlash(elem ...string) string {
 }
 
 func (c *Compiler) toGoPath(f *File) string {
-	packageParts := strings.Split(f.Package, ".")
-	return joinWithSlash(c.config.Package, joinWithSlash(packageParts...))
+	return filepath.Join(c.config.Package, f.Package)
 }
 
 func (c *Compiler) createPackage(file *File, level int) (*goPackage, error) {
@@ -208,15 +254,34 @@ func (c *Compiler) addImport(imports map[string]*goImport, path, alias string) *
 	return imp
 }
 
-func (c *Compiler) writeFile(file *goPackage, b *Builder) error {
-	b.W("package %s\n", file.packageName)
+func (c *Compiler) littleEndianFlags(b *Builder) {
+	b.W("// +build 386 amd64 arm arm64 ppc64le mips64le mipsle riscv64 wasm")
+	b.W("")
+}
+
+func (c *Compiler) bigEndianFlags(b *Builder) {
+	b.W("// +build ppc64 s390x mips mips64")
+	b.W("")
+}
+
+func (c *Compiler) writeFile(file *goPackage, b *Builder, order binary.ByteOrder) error {
+	W := b.W
+
+	switch order {
+	case binary.LittleEndian:
+		c.littleEndianFlags(b)
+	case binary.BigEndian:
+		c.bigEndianFlags(b)
+	}
+
+	W("package %s\n", file.packageName)
 
 	if len(file.imports) > 0 {
-		b.WriteLine("import (")
+		W("import (")
 		for _, imp := range file.imports {
-			b.W("    %s", imp)
+			W("    %s", imp)
 		}
-		b.WriteLine(")\n")
+		W(")\n")
 	}
 
 	for _, enum := range file.enums {
@@ -269,14 +334,14 @@ func (c *Compiler) writeFile(file *goPackage, b *Builder) error {
             }
         }
     }`))
-		init.WriteLine("")
-		init.WriteLine("")
+		init.W("")
+		init.W("")
 
 		for _, st := range file.structs {
-			if err := c.genStruct(file, st, false, b); err != nil {
+			if err := c.genStruct(file, st, false, b, order); err != nil {
 				return err
 			}
-			if err := c.genStruct(file, st, true, b); err != nil {
+			if err := c.genStruct(file, st, true, b, order); err != nil {
 				return err
 			}
 
@@ -301,26 +366,28 @@ func (c *Compiler) writeFile(file *goPackage, b *Builder) error {
 	//}
 
 	for _, str := range file.strings {
-		if err := c.genString(str, false, b); err != nil {
+		if err := c.genString(str, false, b, order); err != nil {
 			return err
 		}
-		if err := c.genString(str, true, b); err != nil {
+		if err := c.genString(str, true, b, order); err != nil {
 			return err
 		}
 	}
 
 	for _, list := range file.lists {
-		if err := c.genList(list, false, b); err != nil {
+		if err := c.genList(list, false, b, order); err != nil {
 			return err
 		}
-		if err := c.genList(list, true, b); err != nil {
+		if err := c.genList(list, true, b, order); err != nil {
 			return err
 		}
 	}
 
-	init.W("}\n")
-
-	b.W(init.String())
+	initStr := init.String()
+	if initStr != "func init() {\n" {
+		W(initStr)
+		W("}\n")
+	}
 
 	return nil
 }
@@ -354,9 +421,9 @@ func (c *Compiler) resolve(pkg *goPackage, t *Type, level int) (*goType, error) 
 		}
 
 		base := t.Base()
-		importedType := importPkg.byType[base]
-		if importedType != nil {
-
+		importedType := importPkg.types[base.Name]
+		if importedType == nil {
+			return nil, fmt.Errorf("'%s' could not resolve type '%s' in '%s'", t.File.Path, base.Name, importedType.t.File.Path)
 		}
 
 		// Handle imported type
@@ -524,7 +591,7 @@ func (c *Compiler) resolve(pkg *goPackage, t *Type, level int) (*goType, error) 
 		return c.primitive(pkg, t, "int32"), nil
 	case KindUInt32:
 		return c.primitive(pkg, t, "uint32"), nil
-	case KindInt64, KindEpoch:
+	case KindInt64:
 		return c.primitive(pkg, t, "int64"), nil
 	case KindUInt64:
 		return c.primitive(pkg, t, "uint64"), nil
@@ -580,8 +647,12 @@ func (c *Compiler) fieldName(f string) string {
 		return "Mut_"
 	case "Write":
 		return "Write_"
+	case "WriteTo":
+		return "WriteTo_"
 	case "Read":
 		return "Read_"
+	case "ReadFrom":
+		return "ReadFrom_"
 	case "MarshalBinary":
 		return "MarshalBinary_"
 	case "UnmarshalBinary":
@@ -628,7 +699,7 @@ func (c *Compiler) goTypeName(t *Type) string {
 		return "int32"
 	case KindUInt32:
 		return "uint32"
-	case KindInt64, KindEpoch:
+	case KindInt64:
 		return "int64"
 	case KindUInt64:
 		return "uint64"
@@ -668,7 +739,7 @@ func (c *Compiler) genEnum(file *goPackage, t *goType, b *Builder) error {
 	return nil
 }
 
-func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Builder) error {
+func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	//_ = c.genStruct(file, t, mut, b)
 	st := t.st
 	c.writeComments(b, t.t.Comments)
@@ -851,16 +922,16 @@ func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Build
 			continue
 		}
 		if mut {
-			c.writeFieldSetter(b, t, field)
-			c.writeFieldGetter(mut, b, t, field)
+			c.writeFieldSetter(b, t, field, order)
+			c.writeFieldGetter(mut, b, t, field, order)
 		} else {
-			c.writeFieldGetter(mut, b, t, field)
+			c.writeFieldGetter(mut, b, t, field, order)
 		}
 	}
 	return nil
 }
 
-func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField) {
+func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField, order binary.ByteOrder) {
 	goStructName := st.name
 	if mut {
 		goStructName = st.mut
@@ -916,7 +987,7 @@ func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField
 	}
 }
 
-func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField) {
+func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField, order binary.ByteOrder) {
 	//embeddedStructName := st.name
 	goStructName := st.mut
 	fieldName := f.public
@@ -925,6 +996,7 @@ func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField) {
 
 	getBuffer := fmt.Sprintf("s.%s", st.name)
 
+	W := b.W
 	if f.field.Type.Optional {
 		/*
 			func Set(b, flag Bits) Bits    { return b | flag }
@@ -932,58 +1004,58 @@ func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField) {
 			func Toggle(b, flag Bits) Bits { return b ^ flag }
 			func Has(b, flag Bits) bool    { return b&flag != 0 }
 		*/
-		b.W("func (s *%s) Set%s(v *%s) *%s {", goStructName, fieldName, typeName, goStructName)
-		b.W("    if v == nil {")
-		b.W("        %s[%d] = %s[%d] &^ %d", getBuffer, f.field.OptOffset, getBuffer, f.field.OptOffset, f.field.OptMask)
-		b.W("        *(*%s)(unsafe.Pointer(&%s[%d])) = %s{}", typeName, getBuffer, f.field.Offset, typeName)
-		b.W("        return s")
-		b.W("    }")
-		b.W("    %s[%d] = %s[%d] | %d", getBuffer, f.field.OptOffset, getBuffer, f.field.OptOffset, f.field.OptMask)
+		W("func (s *%s) Set%s(v *%s) *%s {", goStructName, fieldName, typeName, goStructName)
+		W("    if v == nil {")
+		W("        %s[%d] = %s[%d] &^ %d", getBuffer, f.field.OptOffset, getBuffer, f.field.OptOffset, f.field.OptMask)
+		W("        *(*%s)(unsafe.Pointer(&%s[%d])) = %s{}", typeName, getBuffer, f.field.Offset, typeName)
+		W("        return s")
+		W("    }")
+		W("    %s[%d] = %s[%d] | %d", getBuffer, f.field.OptOffset, getBuffer, f.field.OptOffset, f.field.OptMask)
 
 		switch f.field.Type.Kind {
 		case KindBool:
-			b.W("    if v {")
-			b.W("        %s[%d] = 1", getBuffer, f.field.Offset)
-			b.W("    } else {")
-			b.W("        %s[%d] = 0", getBuffer, f.field.Offset)
-			b.W("    }")
+			W("    if v {")
+			W("        %s[%d] = 1", getBuffer, f.field.Offset)
+			W("    } else {")
+			W("        %s[%d] = 0", getBuffer, f.field.Offset)
+			W("    }")
 
 		default:
-			b.W("    *(*%s)(unsafe.Pointer(&%s[%d])) = *v", typeName, getBuffer, f.field.Offset)
+			W("    *(*%s)(unsafe.Pointer(&%s[%d])) = *v", typeName, getBuffer, f.field.Offset)
 		}
 
-		b.W("    return s")
-		b.W("}\n")
+		W("    return s")
+		W("}\n")
 	} else {
 		if f.isPointer {
-			b.W("func (s *%s) Set%s(v *%s) *%s {", goStructName, fieldName, typeName, goStructName)
-			b.W("    if v == nil {")
-			b.W("        v = &%s{}", typeName)
-			b.W("    }")
-			b.W("    *(*%s)(unsafe.Pointer(&%s[%d])) = *v", typeName, getBuffer, f.field.Offset)
-			b.W("    return s")
+			W("func (s *%s) Set%s(v *%s) *%s {", goStructName, fieldName, typeName, goStructName)
+			W("    if v == nil {")
+			W("        v = &%s{}", typeName)
+			W("    }")
+			W("    *(*%s)(unsafe.Pointer(&%s[%d])) = *v", typeName, getBuffer, f.field.Offset)
+			W("    return s")
 		} else {
-			b.W("func (s *%s) Set%s(v %s) *%s {", goStructName, fieldName, typeName, goStructName)
+			W("func (s *%s) Set%s(v %s) *%s {", goStructName, fieldName, typeName, goStructName)
 
 			switch f.field.Type.Kind {
 			case KindBool:
-				b.W("    if v {")
-				b.W("        %s[%d] = 1", getBuffer, f.field.Offset)
-				b.W("    } else {")
-				b.W("        %s[%d] = 0", getBuffer, f.field.Offset)
-				b.W("    }")
+				W("    if v {")
+				W("        %s[%d] = 1", getBuffer, f.field.Offset)
+				W("    } else {")
+				W("        %s[%d] = 0", getBuffer, f.field.Offset)
+				W("    }")
 
 			default:
-				b.W("    *(*%s)(unsafe.Pointer(&%s[%d])) = v", typeName, getBuffer, f.field.Offset)
+				W("    *(*%s)(unsafe.Pointer(&%s[%d])) = v", typeName, getBuffer, f.field.Offset)
 			}
 
-			b.W("    return s")
+			W("    return s")
 		}
-		b.W("}\n")
+		W("}\n")
 	}
 }
 
-func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder) error {
+func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	st := t.st
 	c.writeComments(b, t.t.Comments)
 	W := b.W
@@ -1109,19 +1181,20 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder) e
 			}
 		*/
 
-		W("func (s *%s) Read(r io.Reader) error {", t.name)
+		W("func (s *%s) ReadFrom(r io.Reader) (int64, error) {", t.name)
 		W("    n, err := io.ReadFull(r, (*(*[%d]byte)(unsafe.Pointer(s)))[0:])", t.t.Size)
 		W("    if err != nil {")
-		W("        return err")
+		W("        return int64(n), err")
 		W("    }")
 		W("    if n != %d {", t.t.Size)
-		W("        return io.ErrShortBuffer")
+		W("        return int64(n), io.ErrShortBuffer")
 		W("    }")
-		W("    return nil")
+		W("    return int64(n), nil")
 		W("}")
 
-		W("func (s *%s) Write(w io.Writer) (n int, err error) {", t.name)
-		W("    return w.Write((*(*[%d]byte)(unsafe.Pointer(s)))[0:])", t.t.Size)
+		W("func (s *%s) WriteTo(w io.Writer) (int64, error) {", t.name)
+		W("    n, err := w.Write((*(*[%d]byte)(unsafe.Pointer(s)))[0:])", t.t.Size)
+		W("    return int64(n), err")
 		W("}")
 
 		W("func (s *%s) MarshalBinaryTo(b []byte) []byte {", t.name)
@@ -1131,6 +1204,15 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder) e
 		W("func (s *%s) MarshalBinary() ([]byte, error) {", t.name)
 		W("    var v []byte")
 		W("    return append(v, (*(*[%d]byte)(unsafe.Pointer(s)))[0:]...), nil", t.t.Size)
+		W("}")
+
+		W("func (s *%s) Read(b []byte) (n int, err error) {", t.name)
+		W("    if len(b) < %d {", t.t.Size)
+		W("        return -1, io.ErrShortBuffer")
+		W("    }")
+		W("    v := (*%s)(unsafe.Pointer(&b[0]))", t.name)
+		W("    *v = *s")
+		W("    return %d, nil", t.t.Size)
 		W("}")
 
 		W("func (s *%s) UnmarshalBinary(b []byte) error {", t.name)
@@ -1232,7 +1314,7 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder) e
 	return nil
 }
 
-func (c *Compiler) genList(t *goType, mut bool, b *Builder) error {
+func (c *Compiler) genList(t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	if t.list == nil {
 		return errors.New("type is not a list")
 	}
@@ -1453,11 +1535,11 @@ func (c *Compiler) genList(t *goType, mut bool, b *Builder) error {
 	return nil
 }
 
-func (c *Compiler) genUnion(t *goType, b *Builder) error {
+func (c *Compiler) genUnion(t *goType, b *Builder, order binary.ByteOrder) error {
 	return nil
 }
 
-func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
+func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	W := b.W
 	size := t.t.Len
 	sizeIndex := size - 1
@@ -1511,7 +1593,7 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
 		if sizeBytes == 1 {
 			W("    return int(s[%d])", sizeIndex)
 		} else if sizeBytes == 2 {
-			W("    return int(*(*uint16)(unsafe.Pointer(&s[%d]))", sizeIndex)
+			W("    return int(*(*uint16)(unsafe.Pointer(&s[%d])))", sizeIndex)
 			//W("    return int(uint16(s[%d]) | uint16(s[%d]) << 8)", sizeIndex, sizeIndex+1)
 		}
 		W("}")
@@ -1526,7 +1608,7 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
 		if sizeBytes == 1 {
 			W("        Len: int(s[%d]),", sizeIndex)
 		} else {
-			W("        Len: int(*(*uint16)(unsafe.Pointer(&s[%d])),", sizeIndex)
+			W("        Len: int(*(*uint16)(unsafe.Pointer(&s[%d]))),", sizeIndex)
 			//W("        Len: int(uint16(s[%d]) | uint16(s[%d]) << 8),", sizeIndex, sizeIndex+1)
 		}
 		W("    }))")
@@ -1554,7 +1636,7 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
 		W("    return *(**%s)(unsafe.Pointer(&s))", t.mut)
 		W("}")
 
-		W("func (s *%s) Read(r io.Reader) error {", t.name)
+		W("func (s *%s) ReadFrom(r io.Reader) error {", t.name)
 		W("    n, err := io.ReadFull(r, (*(*[%d]byte)(unsafe.Pointer(&s)))[0:])", t.t.Size)
 		W("    if err != nil {")
 		W("        return err")
@@ -1565,7 +1647,7 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
 		W("    return nil")
 		W("}")
 
-		W("func (s *%s) Write(w io.Writer) (n int, err error) {", t.name)
+		W("func (s *%s) WriteTo(w io.Writer) (n int, err error) {", t.name)
 		W("    return w.Write((*(*[%d]byte)(unsafe.Pointer(&s)))[0:])", t.t.Size)
 		W("}")
 
@@ -1605,106 +1687,4 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder) error {
 	//}
 	//W("}\n")
 	return nil
-}
-
-func GenerateGoString(size int, buPrefix string) string {
-	b := NewBuilder()
-	W := b.W
-	sizeIndex := size - 1
-	sizeBytes := 1
-	if size <= 256 {
-		sizeBytes = 1
-	} else if size < 65535 {
-		sizeBytes = 2
-		sizeIndex--
-	}
-	W("type String%d [%d]byte", size, size)
-	W("func NewString%d(s string) *String%d {", size, size)
-	W("    v := String%d{}", size)
-	W("    v.Set(s)")
-	W("    return &v")
-	W("}")
-
-	W("func (s *String%d) Set(v string) {", size)
-	W("    copy(s[0:%d], v)", sizeIndex)
-	W("    c := %d", sizeIndex)
-	W("    l := len(v)")
-	W("    if l > c {")
-	if sizeBytes == 1 {
-		W("        s[%d] = byte(c)", sizeIndex)
-	} else if sizeBytes == 2 {
-		W("        s[%d] = byte(c)", sizeIndex)
-		W("        s[%d] = byte(c >> 8)", sizeIndex+1)
-	}
-	W("    } else {")
-	if sizeBytes == 1 {
-		W("        s[%d] = byte(l)", sizeIndex)
-	} else if sizeBytes == 2 {
-		W("        s[%d] = byte(l)", sizeIndex)
-		W("        s[%d] = byte(l >> 8)", sizeIndex+1)
-	}
-	W("    }")
-	W("}")
-
-	W("func (s *String%d) Len() int {", size)
-	if sizeBytes == 1 {
-		W("    return int(s[%d])", sizeIndex)
-	} else if sizeBytes == 2 {
-		W("    return int(uint16(s[%d]) | uint16(s[%d]) << 8)", sizeIndex, sizeIndex+1)
-	}
-	W("}")
-
-	W("func (s *String%d) Cap() int {", size)
-	W("    return %d", sizeIndex)
-	W("}")
-
-	W("func (s *String%d) Cast() string {", size)
-	W("    return *(*string)(unsafe.Pointer(&reflect.StringHeader{")
-	W("        Data: uintptr(unsafe.Pointer(&s[0])),")
-	if sizeBytes == 1 {
-		W("        Len: int(s[%d]),", sizeIndex)
-	} else {
-		W("        Len: int(uint16(s[%d]) | uint16(s[%d]) << 8),", sizeIndex, sizeIndex+1)
-	}
-	W("    }))")
-	W("}")
-
-	W("func (s *String%d) String() string {", size)
-	if sizeBytes == 1 {
-		W("    return string(s[0:s[%d]])", sizeIndex)
-	} else {
-		W("    return string(s[0:s.Len()])")
-	}
-	W("}")
-
-	W("func (s *String%d) Bytes() []byte {", size)
-	W("    return s[0:s.Len()]")
-	W("}")
-
-	W("func (s *String%d) Clone() *String%d {", size, size)
-	W("    v := String%d{}", size)
-	W("    copy(s[0:], v[0:])")
-	W("    return &v")
-	W("}")
-
-	W("func (s *String%d) Equal(v %sString) bool {", size, buPrefix)
-	W("    return s.Cast() == v.Cast()")
-	W("}")
-
-	//W("func (s *String%d) Hash() uint32 {", size)
-	//W("    return %sHash32(s.Cast())", buPrefix)
-	//W("}")
-	//
-	//W("func (s *String%d) Hash64() uint64 {", size)
-	//if sizeBytes == 1 {
-	//	W("    return %sHash64(s.Cast())", buPrefix)
-	//} else {
-	//	W("    return %sHash64(s.Cast())", buPrefix)
-	//	//W("    return %sHash64Bytes(s[0:uint16(s[%d]) | uint16(s[%d])])", buPrefix, sizeIndex, sizeIndex+1)
-	//}
-	//W("}\n")
-
-	// uint16(buf[0]) | uint16(buf[1])<<8
-
-	return b.String()
 }

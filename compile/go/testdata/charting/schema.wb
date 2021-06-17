@@ -1,5 +1,3 @@
-package charting
-
 struct Plot {
 
 }

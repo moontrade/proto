@@ -1,7 +1,5 @@
-package order
-
 import (
-	moontrade.pricing
+	"../pricing/schema.wb"
 )
 
 struct Order {

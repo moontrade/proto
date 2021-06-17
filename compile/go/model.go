@@ -1,18 +1,26 @@
 package _go
 
-import . "github.com/moontrade/proto/schema"
+import (
+	"encoding/binary"
+	. "github.com/moontrade/proto/schema"
+)
 
 const headerFieldName = "_h_"
-const GoFileName = "proto.go"
-const GoFileNameSuffix = "_proto.go"
+
+func goFileName(order binary.ByteOrder) string {
+	if order == binary.BigEndian {
+		return "proto_be.go"
+	}
+	return "proto.go"
+}
 
 // Configuration for the Go code generator
 type GoConfig struct {
-	BigEndianSafe bool
-	Fluent        bool
+	BigEndian bool
+	Fluent    bool
+	NoGoFmt   bool
 
-	Package       string
-	GlobalPackage string
+	Package string
 	// By default a separate Mutable type is created for each struct
 	// This flag sets that only one struct that is both read-only and mutable is generated
 	Mutable       bool

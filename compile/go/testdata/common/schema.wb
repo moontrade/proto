@@ -1,5 +1,3 @@
-package common
-
 enum Direction : byte {
 	Down 		= 0
 	Sideways 	= 1

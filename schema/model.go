@@ -23,7 +23,6 @@ const (
 	KindFloat32 = Kind(10)
 	KindFloat64 = Kind(11)
 	KindString  = Kind(12)
-	KindEpoch   = Kind(15)
 	KindStruct  = Kind(30) // User-defined structure
 	KindEnum    = Kind(31) // User-defined
 	KindUnion   = Kind(33) // User-defined
@@ -40,7 +39,7 @@ func (k Kind) Size() int {
 		return 2
 	case KindInt32, KindUInt32, KindFloat32:
 		return 4
-	case KindInt64, KindUInt64, KindFloat64, KindEpoch:
+	case KindInt64, KindUInt64, KindFloat64:
 		return 8
 	}
 	return -1
@@ -111,22 +110,20 @@ type Type struct {
 }
 
 type File struct {
-	Name      string
-	Path      string
-	Package   string
-	Hash      uint64
-	Err       error
-	Content   string
-	Imports   []*Imports
-	Consts    []*Const
-	Structs   []*Struct
-	Enums     []*Enum
-	Unions    []*Union
-	Lists     map[string][]*Type
-	Types     map[string]*Type
-	ImportMap map[string]*Import
-	Exports   []*File
-
+	Name        string
+	Path        string
+	Package     string
+	Hash        uint64
+	Err         error
+	Content     string
+	Imports     []*Imports
+	Consts      []*Const
+	Structs     []*Struct
+	Enums       []*Enum
+	Unions      []*Union
+	Lists       map[string][]*Type
+	Types       map[string]*Type
+	ImportMap   map[string]*Import
 	Strings     map[string][]*Type
 	GlobalLists map[string][]*Type
 }
@@ -138,15 +135,14 @@ type Imports struct {
 }
 
 type Import struct {
-	Imports    *Imports
-	Parent     *File
-	Path       string
-	Name       string
-	SimpleName string
-	Alias      string
-	File       *File
-	Comments   []string
-	Line       Line
+	Imports  *Imports
+	Parent   *File
+	Path     string
+	Name     string
+	Alias    string
+	File     *File
+	Comments []string
+	Line     Line
 }
 
 type Enum struct {
@@ -279,9 +275,6 @@ func KindOf(name string) Kind {
 
 	case "bool", "boolean":
 		return KindBool
-
-	case "epoch":
-		return KindEpoch
 
 	default:
 		return KindUnknown

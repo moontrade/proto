@@ -1,0 +1,33 @@
+struct ID {
+	partition	u16		// Partition
+	record 		u16		// Record size in bytes
+	resolution 	u32		// Resolution in millis
+	sequence	i64		// Sequence in partition
+}
+
+struct Stream {
+	id			ID
+	first		i64
+	records		i64
+	pages		i64
+	size		i64
+	xsize		i64
+}
+
+struct PageID {
+	stream	ID
+	id		i64
+}
+
+//
+struct Page {
+	first		i64				// Start timestamp
+	duration 	i64				// Duration (millis) between begin and end
+	last		i64				// End timestamp
+	count		u16				// Number of records
+	record		u16				// Record size
+	size		u16				// Size decompressed
+	xsize		u16				// Size compressed
+	pad			string32		// Pad
+	data		string65472		// Data
+}

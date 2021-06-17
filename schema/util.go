@@ -3,6 +3,7 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -44,7 +45,28 @@ func DivRoundUp(n, a uintptr) uintptr {
 	return (n + a - 1) / a
 }
 
-func Align(size int) int {
+func PackageName(path string) string {
+	return filepath.Base(filepath.Dir(path))
+	//name := filepath.Base(path)
+	//index := strings.Index(name, ".")
+	//if index > -1 {
+	//	name = strings.TrimSpace(name[0:index])
+	//} else {
+	//	name = strings.TrimSpace(name)
+	//}
+	//switch path {
+	//case ".", "_":
+	//	return filepath.Dir(path)
+	//}
+	//return name
+}
+
+func Align(t *Type) int {
+	switch t.Kind {
+	case KindString:
+		return t.Size
+	}
+	size := t.Size
 	if size <= 0 {
 		return 1
 	}
@@ -100,6 +122,31 @@ func StartsWith(val string, s string) bool {
 		return false
 	}
 	return val[0:len(s)] == s
+}
+
+func RelativePath(base, relative string) string {
+	dir := base
+	if len(filepath.Ext(base)) > 0 {
+		dir = filepath.Dir(dir)
+	}
+	if len(relative) == 0 {
+		return base
+	}
+	// Is absolute path?
+	if relative[0] == '/' {
+		return relative
+	}
+	if strings.Index(relative, "./") == 0 {
+		return filepath.Join(dir, relative[2:])
+	}
+	for strings.Index(relative, "../") == 0 {
+		if len(dir) < 2 {
+			return ""
+		}
+		dir = filepath.Dir(dir)
+		relative = relative[3:]
+	}
+	return filepath.Join(dir, relative)
 }
 
 func IsValidName(n string) bool {

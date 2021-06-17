@@ -28,8 +28,9 @@ func Parse(path, content string) (*File, error) {
 	p := &Parser{
 		content: content,
 		file: &File{
-			Path:  path,
-			Types: make(map[string]*Type),
+			Package: PackageName(path),
+			Path:    path,
+			Types:   make(map[string]*Type),
 		},
 	}
 	return p.Parse()
@@ -66,7 +67,7 @@ func (p *Parser) nextLine() (string, error) {
 }
 
 func (p *Parser) error(msg string, args ...interface{}) error {
-	return errors.New(fmt.Sprintf("%s:%d %s", p.file.Path, p.lineCount, fmt.Sprintf(msg, args...)))
+	return fmt.Errorf("%s:%d %s", p.file.Path, p.lineCount, fmt.Sprintf(msg, args...))
 }
 
 func (p *Parser) Parse() (*File, error) {
@@ -101,13 +102,13 @@ func (p *Parser) Parse() (*File, error) {
 				break loop
 
 			// package
-			case 'p':
-				err := p.parsePackage(line, comments)
-				if err != nil {
-					return nil, err
-				}
-				comments = nil
-				break loop
+			//case 'p':
+			//	err := p.parsePackage(line, comments)
+			//	if err != nil {
+			//		return nil, err
+			//	}
+			//	comments = nil
+			//	break loop
 
 			// import
 			case 'i':
@@ -207,8 +208,8 @@ func (p *Parser) parseImport(line string, comments []string) (*Import, error) {
 	type stateCode int
 	const (
 		StateStart stateCode = iota
-		StateName
-		StateAfterName
+		StatePath
+		StatePathAfter
 		StateAlias
 		StateAfterAlias
 		StateComment
@@ -216,9 +217,10 @@ func (p *Parser) parseImport(line string, comments []string) (*Import, error) {
 
 	state := StateStart
 	mark := 0
-	last := byte(0)
+	//last := byte(0)
 
 	name := ""
+	path := ""
 	alias := ""
 
 loop:
@@ -231,41 +233,52 @@ loop:
 				mark = i
 				continue
 
-			default:
-				if !IsLetter(c) {
-					return nil, p.error(fmt.Sprintf("import package name must start with a letter not '%s'", string(c)))
-				}
-				state = StateName
-				last = c
-				mark = i
-			}
-
-		case StateName:
-			switch c {
-			case ' ', '\t', '\r':
-				name = line[mark:i]
-				state = StateAfterName
+			case '"':
+				state = StatePath
+				//last = c
 				mark = i + 1
-			case '/':
-				name = line[mark:i]
-				state = StateComment
-				mark = i
-			case '.':
-				if last == '.' {
-					return nil, p.error(fmt.Sprintf("import package name must start with a letter not '%s'", string(c)))
-				}
-			default:
-				if last == '.' {
-					if !IsLetter(c) {
-						return nil, p.error(fmt.Sprintf("import package name must start with a letter at each level: cannot start with %s", string(c)))
-					}
-				} else if !IsNumeral(c) && !IsLetter(c) && c != '_' {
-					return nil, p.error(fmt.Sprintf("invalid import package character '%s'", string(c)))
-				}
-			}
-			last = c
 
-		case StateAfterName:
+			default:
+				if !IsLetter(c) && c != '_' {
+					return nil, p.error(fmt.Sprintf("import package name must start with a '\"' or a letter: '%s'", string(c)))
+				}
+				state = StateAlias
+				//last = c
+				mark = i
+			}
+
+		case StatePath:
+			if c == '"' {
+				path = line[mark:i]
+				name = PackageName(path)
+				state = StatePathAfter
+				mark = i + 1
+			}
+			//switch c {
+			//case ' ', '\t', '\r':
+			//	name = line[mark:i]
+			//	state = StatePathAfter
+			//	mark = i + 1
+			//case '/':
+			//	name = line[mark:i]
+			//	state = StateComment
+			//	mark = i
+			//case '.':
+			//	if last == '.' {
+			//		return nil, p.error(fmt.Sprintf("import package name must start with a letter not '%s'", string(c)))
+			//	}
+			//default:
+			//	if last == '.' {
+			//		if !IsLetter(c) {
+			//			return nil, p.error(fmt.Sprintf("import package name must start with a letter at each level: cannot start with %s", string(c)))
+			//		}
+			//	} else if !IsNumeral(c) && !IsLetter(c) && c != '_' {
+			//		return nil, p.error(fmt.Sprintf("invalid import package character '%s'", string(c)))
+			//	}
+			//}
+			//last = c
+
+		case StatePathAfter:
 			switch c {
 			case ' ', '\t', '\r':
 				mark = i + 1
@@ -300,6 +313,17 @@ loop:
 				}
 			}
 
+		case StateAfterAlias:
+			switch c {
+			case ' ', '\t', '\r':
+			case '"':
+				state = StatePath
+				mark = i + 1
+			default:
+				return nil, p.error(fmt.Sprintf(
+					"invalid import package character after alias when expecting '\"': '%s'", string(c)))
+			}
+
 		case StateComment:
 			switch c {
 			case '/':
@@ -312,7 +336,7 @@ loop:
 	}
 
 	switch state {
-	case StateName:
+	case StatePath:
 		name = line[mark:]
 	case StateAlias:
 		alias = line[mark:]
@@ -320,9 +344,8 @@ loop:
 		return nil, p.error("expected comment")
 	}
 
-	simple := SimpleName(name)
 	if len(alias) == 0 {
-		alias = simple
+		alias = name
 	}
 	return &Import{
 		File: p.file,
@@ -331,10 +354,10 @@ loop:
 			Begin:  p.mark,
 			End:    p.index,
 		},
-		Name:       name,
-		SimpleName: simple,
-		Alias:      alias,
-		Comments:   comments,
+		Name:     name,
+		Path:     path,
+		Alias:    alias,
+		Comments: comments,
 	}, nil
 }
 

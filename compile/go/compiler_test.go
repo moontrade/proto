@@ -8,7 +8,7 @@ import (
 
 func TestNewGenerator(t *testing.T) {
 	c, err := NewSchema(&Config{
-		Path: "../../pricing",
+		Path: "./testdata",
 	})
 
 	if err != nil {
@@ -16,11 +16,11 @@ func TestNewGenerator(t *testing.T) {
 	}
 
 	goCompiler, err := NewCompiler(c, &GoConfig{
-		BigEndianSafe: false,
-		Fluent:        true,
-		Mutable:       true,
-		Package:       "github.com/moontrade/proto/model",
-		Output:        "../../pricing",
+		BigEndian: false,
+		Fluent:    true,
+		Mutable:   true,
+		Package:   "github.com/moontrade/proto/compile/go/testdata/go",
+		Output:    "",
 	})
 	if err != nil {
 		t.Fatal(err)

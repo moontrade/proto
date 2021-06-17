@@ -542,7 +542,7 @@ func (c *Compiler) resolve(pkg *asPackage, t *Type, level int) (*asType, error) 
 		return c.primitive(pkg, t, "i32"), nil
 	case KindUInt32:
 		return c.primitive(pkg, t, "u32"), nil
-	case KindInt64, KindEpoch:
+	case KindInt64:
 		return c.primitive(pkg, t, "i64"), nil
 	case KindUInt64:
 		return c.primitive(pkg, t, "u64"), nil
@@ -640,7 +640,7 @@ func (c *Compiler) asTypeName(t *Type) string {
 		return "i32"
 	case KindUInt32:
 		return "u32"
-	case KindInt64, KindEpoch:
+	case KindInt64:
 		return "i64"
 	case KindUInt64:
 		return "u64"

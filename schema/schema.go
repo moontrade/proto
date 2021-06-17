@@ -17,7 +17,7 @@ var (
 
 const (
 	maxDepth   = 10
-	FileSuffix = ".buf"
+	FileSuffix = ".wb"
 )
 
 type Config struct {
@@ -26,9 +26,109 @@ type Config struct {
 
 type Schema struct {
 	Config  *Config
+	RootDir string
 	Files   map[string]*File
 	Strings map[string][]*Type
 	Lists   map[string][]*Type
+
+	byPackage map[string]*File
+}
+
+func (c *Schema) load(path string, count int) (*File, error) {
+	if count > 10 {
+		return nil, fmt.Errorf("dependency cycle: %s", path)
+	}
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		c.Files[path] = &File{
+			Err: err,
+		}
+		return nil, err
+	}
+
+	if existing := c.Files[path]; existing != nil {
+		return existing, nil
+	}
+
+	buf, err := ioutil.ReadFile(path)
+	if err != nil {
+		c.Files[path] = &File{
+			Err: err,
+		}
+		return nil, err
+	}
+
+	dir := filepath.Dir(path)
+	if existing := c.byPackage[dir]; existing != nil {
+		return existing, fmt.Errorf("only one '%s' file per directory: '%s' has '%s' and '%s'", FileSuffix, dir, existing.Path, path)
+	}
+
+	content := string(buf)
+	file, err := Parse(path, content)
+	if err != nil {
+		if file == nil {
+			return nil, err
+		}
+		file.Err = err
+	}
+	if file == nil {
+		return nil, errors.New("nil file")
+	}
+
+	file.Path = path
+	c.byPackage[dir] = file
+	c.Files[path] = file
+
+	if file.Strings != nil {
+		for k, l := range file.Strings {
+			existing := c.Strings[k]
+			existing = append(existing, l...)
+			c.Strings[k] = existing
+		}
+	}
+
+	if file.GlobalLists != nil {
+		for k, l := range file.GlobalLists {
+			existing := c.Lists[k]
+			existing = append(existing, l...)
+			c.Lists[k] = existing
+		}
+	}
+
+	if len(file.Imports) > 0 {
+		for _, imps := range file.Imports {
+			for _, imp := range imps.List {
+				p := RelativePath(file.Path, imp.Path)
+				if len(p) == 0 {
+					file.Err = fmt.Errorf("import '%s' could not be resolved", imp.Path)
+					return nil, err
+				}
+				imp.Parent, err = c.load(p, count+1)
+				if err != nil {
+					file.Err = fmt.Errorf("import '%s' could not be resolved: %s", imp.Path, err.Error())
+					return nil, err
+				}
+				imp.Path = p
+				//imp.Parent = file
+			}
+		}
+		//for _, imps := range file.Imports {
+		//	for _, imp := range imps.List {
+		//		if imp.Parent == nil {
+		//			file.Err = fmt.Errorf("import '%s' could not be resolved", imp.Path)
+		//			return nil, err
+		//		}
+		//		err = imp.File.resolve()
+		//		if err != nil {
+		//			file.Err = fmt.Errorf("import '%s' resolve error: %s", imp.Path, err.Error())
+		//			return nil, err
+		//		}
+		//	}
+		//}
+	}
+
+	return file, nil
 }
 
 func NewSchema(config *Config) (*Schema, error) {
@@ -46,10 +146,11 @@ func NewSchema(config *Config) (*Schema, error) {
 	rootPath := root.Name()
 
 	c := &Schema{
-		Config:  config,
-		Files:   make(map[string]*File),
-		Strings: make(map[string][]*Type),
-		Lists:   make(map[string][]*Type),
+		Config:    config,
+		Files:     make(map[string]*File),
+		Strings:   make(map[string][]*Type),
+		Lists:     make(map[string][]*Type),
+		byPackage: make(map[string]*File),
 	}
 
 	walk := func(path string, info fs.FileInfo, err error) error {
@@ -59,49 +160,8 @@ func NewSchema(config *Config) (*Schema, error) {
 		if !strings.HasSuffix(path, FileSuffix) {
 			return nil
 		}
-
-		buf, err := ioutil.ReadFile(path)
-		if err != nil {
-			c.Files[path] = &File{
-				Err: err,
-			}
-			return err
-		}
-		content := string(buf)
-		file, err := Parse(path, content)
-		if err != nil {
-			if file == nil {
-				return err
-			}
-			file.Err = err
-		}
-		if file == nil {
-			return errors.New("nil package")
-		}
-
-		file.Path = path
-		if existing := c.Files[file.Package]; existing != nil {
-			return fmt.Errorf("%s and %s both use the same package valueTypeName: %s", path, existing.Path, file.Package)
-		}
-
-		if file.Strings != nil {
-			for k, l := range file.Strings {
-				existing := c.Strings[k]
-				existing = append(existing, l...)
-				c.Strings[k] = existing
-			}
-		}
-		if file.GlobalLists != nil {
-			for k, l := range file.GlobalLists {
-				existing := c.Lists[k]
-				existing = append(existing, l...)
-				c.Lists[k] = existing
-			}
-		}
-
-		c.Files[file.Package] = file
-
-		return nil
+		_, err = c.load(path, 0)
+		return err
 	}
 
 	// Load schema files
@@ -115,29 +175,52 @@ func NewSchema(config *Config) (*Schema, error) {
 		}
 	}
 
-	// Resolve imports for each schema file
 	for _, file := range c.Files {
-		if len(file.ImportMap) == 0 {
-			continue
-		}
-		for _, imp := range file.ImportMap {
-			imp.Parent = c.Files[imp.Name]
-			if imp.Parent == nil {
-				return nil, fmt.Errorf("%s:%d could not resolve import", imp.File.Path, imp.Line.Number)
-			}
+		_ = file.resolve()
+	}
+	for _, file := range c.Files {
+		if err = file.resolve(); err != nil {
+			return nil, err
 		}
 	}
 
-	// Resolve any types previously awaiting import
-	for _, v := range c.Files {
-		if v == nil {
+	// Find root package directory
+	maxSeparatorsCount := 0
+	rootDir := ""
+	for _, file := range c.Files {
+		cnt := strings.Count(file.Path, string(os.PathSeparator))
+		if len(rootDir) == 0 {
+			rootDir = file.Path
+			maxSeparatorsCount = cnt
 			continue
 		}
-
-		err = v.resolve()
-		if err != nil {
-			return nil, err
+		if maxSeparatorsCount < cnt {
+			maxSeparatorsCount = cnt
+			rootDir = file.Path
 		}
+	}
+	// Find common ancestor directory
+	for {
+		rootDir = filepath.Dir(rootDir)
+		if len(rootDir) == 0 || rootDir == "/" {
+			break
+		}
+
+		cnt := 0
+		for _, file := range c.Files {
+			if strings.Index(file.Path, rootDir) == 0 {
+				cnt++
+			}
+		}
+		if cnt == len(c.Files) {
+			break
+		}
+	}
+
+	c.RootDir = rootDir
+
+	for _, file := range c.Files {
+		file.Package = filepath.Dir(file.Path[len(c.RootDir)+1:])
 	}
 
 	return c, nil
@@ -235,8 +318,6 @@ func (f *File) createTypeName(t *Type, cycle int) string {
 		return "F32"
 	case KindFloat64:
 		return "F64"
-	case KindEpoch:
-		return "Epoch"
 	case KindString:
 		return fmt.Sprintf("String%d", t.Len)
 	case KindStruct, KindEnum, KindUnion, KindUnknown:
@@ -285,7 +366,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 		t.Name = f.createTypeName(t, 0)
 		t.Size = 4
 		t.Resolved = true
-	case KindInt64, KindUInt64, KindFloat64, KindEpoch:
+	case KindInt64, KindUInt64, KindFloat64:
 		t.Name = f.createTypeName(t, 0)
 		t.Size = 8
 		t.Resolved = true
@@ -297,7 +378,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			f.Strings = make(map[string][]*Type)
 		}
 		f.Strings[t.Name] = append(f.Strings[t.Name], t)
-		t.Size = Align(t.Size)
+		//t.Size = Align(t.Size)
 
 	case KindPad:
 		t.Resolved = true
@@ -327,7 +408,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 		} else {
 			return fmt.Errorf("%s:%d lists cannot have more than %d elements", f.Path, t.Line.Number, math.MaxUint16)
 		}
-		aligned := Align(t.Size)
+		aligned := Align(t)
 		if aligned > t.Size {
 			t.Padding = aligned - t.Size
 			t.Size = aligned
@@ -367,7 +448,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 		t.HeaderSize = MapHeaderSize
 		t.ItemSize = MapItemHeaderSize + t.Element.Size + t.Value.Size
 		t.Size = MapHeaderSize + (t.Len * t.ItemSize)
-		t.Size = Align(t.Size)
+		t.Size = Align(t)
 		t.Resolved = true
 
 	case KindEnum:
@@ -484,7 +565,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			fields = append(fields, field)
 		}
 		t.Struct.Fields = fields
-		aligned := Align(t.Size)
+		aligned := Align(t)
 		if aligned > t.Size {
 			pad := aligned - t.Size
 			t.Struct.Fields = append(t.Struct.Fields, &Field{

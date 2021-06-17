@@ -1,9 +1,3 @@
-package pricing
-
-import (
-	moontrade.common
-)
-
 // Candlestick
 struct Candle {
 	open 	f64		// Open price
@@ -37,6 +31,8 @@ struct Liquidations {
 // Delta, Gamma, Vega, Theta, and Rho are the key option Greeks. However, there are many other
 // option Greeks that can be derived from those mentioned above.
 struct Greeks {
+	// Implied Volatility
+	iv		f64
 	// Delta (Δ) is a measure of the sensitivity of an option’s price changes relative to the
 	// changes in the underlying asset’s price. In other words, if the price of the underlying
 	// asset increases by $1, the price of the option will change by Δ amount.
@@ -68,7 +64,7 @@ struct Volume {
 }
 
 struct VolumeSide {
-	open		f64
+	total		f64
 	interest	f64
 	percent		f64
 }
