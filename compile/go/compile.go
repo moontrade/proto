@@ -135,7 +135,13 @@ func (c *Compiler) primitive(file *goPackage, t *Type, goName string) *goType {
 }
 
 func (c *Compiler) stringType(file *goPackage, t *Type) *goType {
-	name := fmt.Sprintf("String%d", t.Len)
+	prefix := ""
+	if t.Kind == KindString {
+		prefix = "String"
+	} else {
+		prefix = "Bytes"
+	}
+	name := fmt.Sprintf("%s%d", prefix, t.Len)
 	mut := fmt.Sprintf("%sMut", name)
 	return &goType{
 		pkg:       file,
@@ -599,7 +605,7 @@ func (c *Compiler) resolve(pkg *goPackage, t *Type, level int) (*goType, error) 
 		return c.primitive(pkg, t, "float32"), nil
 	case KindFloat64:
 		return c.primitive(pkg, t, "float64"), nil
-	case KindString:
+	case KindString, KindBytes:
 		gt := c.stringType(pkg, t)
 		pkg.strings[gt.name] = gt
 		pkg.byType[t] = gt
@@ -707,7 +713,7 @@ func (c *Compiler) goTypeName(t *Type) string {
 		return "float32"
 	case KindFloat64:
 		return "float64"
-	case KindString:
+	case KindString, KindBytes:
 		return "string"
 	case KindEnum:
 		return Capitalize(t.Enum.Name)
@@ -1568,41 +1574,57 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteO
 		W("    return &v")
 		W("}")
 
-		W("func (s *String%d) set(v string) {", size)
-		W("    copy(s[0:%d], v)", sizeIndex)
-		W("    c := %d", sizeIndex)
-		W("    l := len(v)")
-		W("    if l > c {")
-		if sizeBytes == 1 {
-			W("        s[%d] = byte(c)", sizeIndex)
-		} else if sizeBytes == 2 {
-			W("        s[%d] = byte(c)", sizeIndex)
-			W("        s[%d] = byte(c >> 8)", sizeIndex+1)
+		if t.t.Kind == KindBytes {
+			W("func (s *%s) set(v string) {", t.name)
+			W("    copy(s[0:], v)")
+			W("}")
+		} else {
+			W("func (s *%s) set(v string) {", t.name)
+			W("    copy(s[0:%d], v)", sizeIndex)
+			W("    c := %d", sizeIndex)
+			W("    l := len(v)")
+			W("    if l > c {")
+			if sizeBytes == 1 {
+				W("        s[%d] = byte(c)", sizeIndex)
+			} else if sizeBytes == 2 {
+				W("        s[%d] = byte(c)", sizeIndex)
+				W("        s[%d] = byte(c >> 8)", sizeIndex+1)
+			}
+			W("    } else {")
+			if sizeBytes == 1 {
+				W("        s[%d] = byte(l)", sizeIndex)
+			} else if sizeBytes == 2 {
+				W("        s[%d] = byte(l)", sizeIndex)
+				W("        s[%d] = byte(l >> 8)", sizeIndex+1)
+			}
+			W("    }")
+			W("}")
 		}
-		W("    } else {")
-		if sizeBytes == 1 {
-			W("        s[%d] = byte(l)", sizeIndex)
-		} else if sizeBytes == 2 {
-			W("        s[%d] = byte(l)", sizeIndex)
-			W("        s[%d] = byte(l >> 8)", sizeIndex+1)
+
+		if t.t.Kind == KindBytes {
+			W("func (s *%s) Len() int {", t.name)
+			W("    return %d", t.t.Len)
+			W("}")
+
+			W("func (s *%s) Cap() int {", t.name)
+			W("    return %d", t.t.Len)
+			W("}")
+		} else {
+			W("func (s *%s) Len() int {", t.name)
+			if sizeBytes == 1 {
+				W("    return int(s[%d])", sizeIndex)
+			} else if sizeBytes == 2 {
+				W("    return int(*(*uint16)(unsafe.Pointer(&s[%d])))", sizeIndex)
+				//W("    return int(uint16(s[%d]) | uint16(s[%d]) << 8)", sizeIndex, sizeIndex+1)
+			}
+			W("}")
+
+			W("func (s *%s) Cap() int {", t.name)
+			W("    return %d", sizeIndex)
+			W("}")
 		}
-		W("    }")
-		W("}")
 
-		W("func (s *String%d) Len() int {", size)
-		if sizeBytes == 1 {
-			W("    return int(s[%d])", sizeIndex)
-		} else if sizeBytes == 2 {
-			W("    return int(*(*uint16)(unsafe.Pointer(&s[%d])))", sizeIndex)
-			//W("    return int(uint16(s[%d]) | uint16(s[%d]) << 8)", sizeIndex, sizeIndex+1)
-		}
-		W("}")
-
-		W("func (s *String%d) Cap() int {", size)
-		W("    return %d", sizeIndex)
-		W("}")
-
-		W("func (s *String%d) Unsafe() string {", size)
+		W("func (s *%s) Unsafe() string {", t.name)
 		W("    return *(*string)(unsafe.Pointer(&reflect.StringHeader{")
 		W("        Data: uintptr(unsafe.Pointer(&s[0])),")
 		if sizeBytes == 1 {
@@ -1614,7 +1636,7 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteO
 		W("    }))")
 		W("}")
 
-		W("func (s *String%d) String() string {", size)
+		W("func (s *%s) String() string {", t.name)
 		if sizeBytes == 1 {
 			W("    return string(s[0:s[%d]])", sizeIndex)
 		} else {
@@ -1622,12 +1644,12 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteO
 		}
 		W("}")
 
-		W("func (s *String%d) Bytes() []byte {", size)
+		W("func (s *%s) Bytes() []byte {", t.name)
 		W("    return s[0:s.Len()]")
 		W("}")
 
-		W("func (s *String%d) Clone() *String%d {", size, size)
-		W("    v := String%d{}", size)
+		W("func (s *%s) Clone() *%s {", t.name, t.name)
+		W("    v := %s{}", t.name)
 		W("    copy(s[0:], v[0:])")
 		W("    return &v")
 		W("}")

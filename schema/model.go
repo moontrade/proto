@@ -23,6 +23,7 @@ const (
 	KindFloat32 = Kind(10)
 	KindFloat64 = Kind(11)
 	KindString  = Kind(12)
+	KindBytes   = Kind(13)
 	KindStruct  = Kind(30) // User-defined structure
 	KindEnum    = Kind(31) // User-defined
 	KindUnion   = Kind(33) // User-defined

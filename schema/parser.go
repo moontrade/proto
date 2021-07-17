@@ -596,8 +596,21 @@ func (p *Parser) parseType(line string, comments []string) (t *Type, err error) 
 		}
 
 		t.Name = name
-		if StartsWith(name, "string") {
-			length, err := parseStringLen(name[6:])
+		if StartsWith(name, "string") || StartsWith(name, "bytes") {
+			var (
+				kind   Kind
+				length int
+				err    error
+			)
+
+			if StartsWith(name, "string") {
+				kind = KindString
+				length, err = parseStringLen(name[6:])
+			} else {
+				kind = KindBytes
+				length, err = parseStringLen(name[5:])
+			}
+
 			if err != nil {
 				return p.error("invalid string declaration: %s", err.Error())
 			}
@@ -610,7 +623,7 @@ func (p *Parser) parseType(line string, comments []string) (t *Type, err error) 
 				t.Element = &Type{
 					File: p.file,
 					Name: name,
-					Kind: KindString,
+					Kind: kind,
 					Len:  length,
 				}
 
@@ -618,13 +631,13 @@ func (p *Parser) parseType(line string, comments []string) (t *Type, err error) 
 				t.Value = &Type{
 					File: p.file,
 					Name: name,
-					Kind: KindString,
+					Kind: kind,
 					Len:  length,
 				}
 
 			default:
 				t.Name = name
-				t.Kind = KindString
+				t.Kind = kind
 				t.Len = length
 			}
 			state = StateAfterName

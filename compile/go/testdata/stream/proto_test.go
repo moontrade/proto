@@ -7,26 +7,26 @@ import (
 	"testing"
 )
 
+type VarHeader struct {
+	ID   int64
+	ID2  int64
+	Size uint16
+}
+
 func TestPage_Bytes(t *testing.T) {
-	printLayout(page{})
+	printLayout(VarHeader{ID: 1, ID2: 2, Size: 3})
 	fmt.Println()
-	printLayout(Page{})
+	printLayout(Block{})
+	printLayout(BlockHeader{})
 
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, 10)
 	fmt.Println(binary.LittleEndian.Uint64(b))
 }
 
-type page struct {
-	first    int64
-	duration int64
-	last     int64
-	count    uint16
-	record   uint16
-	size     uint16
-	xsize    uint16
-	pad      String32
-	data     String65472
+type streamID struct {
+	sequence  [20]byte
+	partition int64
 }
 
 func printLayout(t interface{}) {

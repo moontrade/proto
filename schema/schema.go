@@ -320,6 +320,8 @@ func (f *File) createTypeName(t *Type, cycle int) string {
 		return "F64"
 	case KindString:
 		return fmt.Sprintf("String%d", t.Len)
+	case KindBytes:
+		return fmt.Sprintf("Bytes%d", t.Len)
 	case KindStruct, KindEnum, KindUnion, KindUnknown:
 		return strings.ReplaceAll(Capitalize(t.Name), ".", "_")
 	case KindList:
@@ -370,7 +372,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 		t.Name = f.createTypeName(t, 0)
 		t.Size = 8
 		t.Resolved = true
-	case KindString:
+	case KindString, KindBytes:
 		t.Name = f.createTypeName(t, 0)
 		t.Size = t.Len
 		t.Resolved = true

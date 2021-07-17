@@ -71,7 +71,6 @@ struct VolumeSide {
 
 struct Time {
 	start 		i64		// Start timestamp (UTC unix millis)
-	duration	i64		// Duration (millis)
 	end 		i64		// End timestamp (UTC unix millis)
 }
 
@@ -93,4 +92,33 @@ struct Bar {
 	trades 			Trades			// Trades
     greeks			Greeks			// Greeks
     liquidations 	Liquidations 	// Liquidations
+}
+
+struct FXBar {
+	start		i64
+	end			i64
+	precision 	f64
+	mid 		Candle			// Price candle / Mid-point
+    bid 		Candle			// Bid candle
+    ask 		Candle			// Ask candle
+    ticks		i64
+    longs		f32
+    shorts		f32
+}
+
+struct FUTBar {
+	start		i64
+	end			i64
+	precision 	f64
+	mid 		Candle			// Price candle / Mid-point
+	bid 		Candle			// Bid candle
+	ask 		Candle			// Ask candle
+	open		i64
+	volume		i64
+	buy			i64
+	sell		i64
+}
+
+struct XBar {
+
 }
