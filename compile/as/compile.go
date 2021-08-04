@@ -127,7 +127,7 @@ func (c *Compiler) createPackage(file *File, level int) (*asPackage, error) {
 	pkg := &asPackage{
 		file:        file,
 		path:        path,
-		dir:         filepath.Join(c.schema.Config.Path, path),
+		dir:         filepath.Join(c.schema.Path, path),
 		packageName: packageParts[len(packageParts)-1],
 		byType:      make(map[*Type]*asType),
 		importMap:   make(map[string]*asImport),

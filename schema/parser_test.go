@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestConfigFromFS(t *testing.T) {
+	config, err := loadFromFS("testdata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(config)
+}
+
 func TestParser(t *testing.T) {
 	f, err := os.Open("schema.bu")
 	if err != nil {
@@ -24,7 +32,7 @@ func TestParser(t *testing.T) {
 }
 
 func TestConst(t *testing.T) {
-	file, err := Parse("", `
+	file, err := ParseFile("", `
 package model
 
 import (

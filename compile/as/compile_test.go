@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewGenerator(t *testing.T) {
-	schema, err := NewSchema(&Config{
+	schema, err := NewSchema(&Schema{
 		Path: "../../../code/test/assembly",
 	})
 

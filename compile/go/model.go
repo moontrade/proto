@@ -14,8 +14,8 @@ func goFileName(order binary.ByteOrder) string {
 	return "proto.go"
 }
 
-// Configuration for the Go code generator
-type GoConfig struct {
+// Config provides configuration for the Compiler
+type Config struct {
 	BigEndian bool
 	Fluent    bool
 	NoGoFmt   bool
@@ -28,24 +28,24 @@ type GoConfig struct {
 	Output        string
 }
 
-// Generates Go code
+// Compiler generates Go code for a supplied Schema
 type Compiler struct {
 	schema   *Schema
-	config   *GoConfig
+	config   *Config
 	packages map[string]*goPackage
 }
 
 type goType struct {
 	pkg       *goPackage
 	t         *Type
-	name      string
-	mut       string
-	primitive bool
-	imp       *goImport
-	cst       *goConst
-	enum      *goEnum
-	st        *goStruct
-	list      *goList
+	name      string    // type name
+	mut       string    // Mutable type name
+	primitive bool      // golang primitive
+	imp       *goImport // associated import
+	cst       *goConst  // const
+	enum      *goEnum   // enum
+	st        *goStruct // struct
+	list      *goList   // list
 }
 
 type goList struct {
@@ -55,24 +55,22 @@ type goList struct {
 }
 
 type goPackage struct {
-	file *File
-
+	file        *File
 	importAlias string
 	packageName string
 	dir         string
 	path        string
 	imports     []string
 	aliasCount  int
-
-	byType    map[*Type]*goType
-	importMap map[string]*goImport
-	types     map[string]*goType
-	lists     map[string]*goType
-	strings   map[string]*goType
-	structs   map[string]*goType
-	enums     map[string]*goType
-	unions    map[string]*goType
-	names     map[string]struct{}
+	byType      map[*Type]*goType
+	importMap   map[string]*goImport
+	types       map[string]*goType
+	lists       map[string]*goType
+	strings     map[string]*goType
+	structs     map[string]*goType
+	enums       map[string]*goType
+	unions      map[string]*goType
+	names       map[string]struct{}
 }
 
 type goImport struct {

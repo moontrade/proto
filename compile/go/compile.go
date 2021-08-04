@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-func NewCompiler(schema *Schema, config *GoConfig) (*Compiler, error) {
+func NewCompiler(schema *Schema, config *Config) (*Compiler, error) {
 	return &Compiler{
 		schema:   schema,
 		config:   config,
@@ -24,7 +24,11 @@ func NewCompiler(schema *Schema, config *GoConfig) (*Compiler, error) {
 func (c *Compiler) Compile() error {
 	// Convert into Go specific model
 	packages := make(map[string]*goPackage)
-	var err error
+	var (
+		err    error
+		output string
+		info   os.FileInfo
+	)
 	for k, v := range c.schema.Files {
 		packages[k], err = c.createPackage(v, 0)
 		if err != nil {
@@ -32,14 +36,16 @@ func (c *Compiler) Compile() error {
 		}
 	}
 
-	path := c.schema.Config.Path
-	path, err = filepath.Abs(path)
+	//path := c.config.Output
+	//path, err = filepath.Abs(path)
+	//output := RelativePath(path, c.config.Output)
+	//output := RelativePath(path, c.config.Output)
+	output, err = filepath.Abs(c.config.Output)
 	if err != nil {
 		return err
 	}
-	output := RelativePath(path, c.config.Output)
 	_ = os.MkdirAll(output, 0755)
-	info, err := os.Stat(output)
+	info, err = os.Stat(output)
 	if err != nil {
 		return err
 	}
@@ -88,7 +94,7 @@ func (c *Compiler) Compile() error {
 		}
 		return nil
 	}
-	err = filepath.Walk(path, c.walkClear)
+	err = filepath.Walk(output, c.walkClear)
 	for _, f := range packages {
 		if err = createFile(f, binary.LittleEndian); err != nil {
 			return err
@@ -162,23 +168,27 @@ func joinWithSlash(elem ...string) string {
 }
 
 func (c *Compiler) toGoPath(f *File) string {
-	return filepath.Join(c.config.Package, f.Package)
+	return filepath.Join(c.config.Package, f.Dir)
 }
+
+const (
+	PathSeparator = string(os.PathSeparator)
+)
 
 func (c *Compiler) createPackage(file *File, level int) (*goPackage, error) {
 	if level >= 20 {
-		return nil, errors.New("cyclic package dependency")
+		return nil, fmt.Errorf("cyclic package dependency: %s", file.Path)
 	}
-	if existing := c.packages[file.Package]; existing != nil {
+	if existing := c.packages[file.Dir]; existing != nil {
 		return existing, nil
 	}
-	packageParts := strings.Split(file.Package, ".")
-	path := filepath.Join(packageParts...)
+	//packageParts := strings.Split(file.Path, PathSeparator)
+	path := file.Dir //filepath.Join(packageParts...)
 	pkg := &goPackage{
 		file:        file,
 		path:        path,
-		dir:         filepath.Join(c.schema.Config.Path, path),
-		packageName: packageParts[len(packageParts)-1],
+		dir:         filepath.Join(c.config.Output, path),
+		packageName: file.Package,
 		byType:      make(map[*Type]*goType),
 		importMap:   make(map[string]*goImport),
 		types:       make(map[string]*goType),
@@ -189,6 +199,7 @@ func (c *Compiler) createPackage(file *File, level int) (*goPackage, error) {
 		unions:      make(map[string]*goType),
 		names:       make(map[string]struct{}),
 	}
+	c.packages[file.Dir] = pkg
 
 	for k, t := range file.Types {
 		n := Capitalize(k)
@@ -203,7 +214,7 @@ func (c *Compiler) createPackage(file *File, level int) (*goPackage, error) {
 		}
 	}
 	for _, value := range file.Types {
-		_, err := c.resolve(pkg, value, 0)
+		_, err := c.resolve(pkg, value, level+1)
 		if err != nil {
 			return nil, err
 		}
@@ -223,8 +234,6 @@ func (c *Compiler) createPackage(file *File, level int) (*goPackage, error) {
 			pkg.imports = append(pkg.imports, fmt.Sprintf("\"%s\"", imp.path))
 		}
 	}
-
-	c.packages[file.Package] = pkg
 
 	return pkg, nil
 }
@@ -306,37 +315,35 @@ func (c *Compiler) writeFile(file *goPackage, b *Builder, order binary.ByteOrder
         b[0] = byte(v)
         b[1] = byte(v >> 8)
 		if *(*uint16)(unsafe.Pointer(&b[0])) != 1 {
-			panic("BigEndian detected... compiled for LittleEndian only!!!")
+			panic("BigEndian not supported")
 		}
 	}`)
-		_, _ = init.Write([]byte(`    to := reflect.TypeOf
-    type sf struct {
+		_, _ = init.Write([]byte(`    type b struct {
         n string
-        o uintptr
-        s uintptr
+        o, s uintptr
     }
-    ss := func(tt interface{}, mtt interface{}, s uintptr, fl []sf) {
-        t := to(tt)
-        mt := to(mtt)
+    a := func(x interface{}, y interface{}, s uintptr, z []b) {
+        t := reflect.TypeOf(x)
+        r := reflect.TypeOf(y)
         if t.Size() != s {
             panic(fmt.Sprintf("sizeof %%s = %%d, expected = %%d", t.Name(), t.Size(), s))
         }
-        if mt.Size() != s {
-            panic(fmt.Sprintf("sizeof %%s = %%d, expected = %%d", mt.Name(), mt.Size(), s))
+        if r.Size() != s {
+            panic(fmt.Sprintf("sizeof %%s = %%d, expected = %%d", r.Name(), r.Size(), s))
         }
-        if t.NumField() != len(fl) {
-            panic(fmt.Sprintf("%%s field count = %%d: expected %%d", t.Name(), t.NumField(), len(fl)))
+        if t.NumField() != len(z) {
+            panic(fmt.Sprintf("%%s field count = %%d: expected %%d", t.Name(), t.NumField(), len(z)))
         }
-        for i, ef := range fl {
+        for i, e := range z {
             f := t.Field(i)
-            if f.Offset != ef.o {
-                panic(fmt.Sprintf("%%s.%%s offset = %%d, expected = %%d", t.Name(), f.Name, f.Offset, ef.o))
+            if f.Offset != e.o {
+                panic(fmt.Sprintf("%%s.%%s offset = %%d, expected = %%d", t.Name(), f.Name, f.Offset, e.o))
             }
-            if f.Type.Size() != ef.s {
-                panic(fmt.Sprintf("%%s.%%s size = %%d, expected = %%d", t.Name(), f.Name, f.Type.Size(), ef.s))
+            if f.Type.Size() != e.s {
+                panic(fmt.Sprintf("%%s.%%s size = %%d, expected = %%d", t.Name(), f.Name, f.Type.Size(), e.s))
             }
-            if f.Name != ef.n {
-                panic(fmt.Sprintf("%%s.%%s expected field: %%s", t.Name(), f.Name, ef.n))
+            if f.Name != e.n {
+                panic(fmt.Sprintf("%%s.%%s expected field: %%s", t.Name(), f.Name, e.n))
             }
         }
     }`))
@@ -351,7 +358,7 @@ func (c *Compiler) writeFile(file *goPackage, b *Builder, order binary.ByteOrder
 				return err
 			}
 
-			init.W("    ss(%s{}, %s{}, %d, []sf{", st.name, st.mut, st.t.Size)
+			init.W("    a(%s{}, %s{}, %d, []b{", st.name, st.mut, st.t.Size)
 			if st.t.HeaderSize > 0 {
 				init.W("        {\"%s\", %d, %d},", headerFieldName, 0, st.t.HeaderSize)
 			}
@@ -381,10 +388,10 @@ func (c *Compiler) writeFile(file *goPackage, b *Builder, order binary.ByteOrder
 	}
 
 	for _, list := range file.lists {
-		if err := c.genList(list, false, b, order); err != nil {
+		if err := c.genArrayList(list, false, b, order); err != nil {
 			return err
 		}
-		if err := c.genList(list, true, b, order); err != nil {
+		if err := c.genArrayList(list, true, b, order); err != nil {
 			return err
 		}
 	}
@@ -417,11 +424,11 @@ func (c *Compiler) resolve(pkg *goPackage, t *Type, level int) (*goType, error) 
 	if t.Import != nil {
 		imp := c.addImport(
 			pkg.importMap,
-			c.toGoPath(t.Import.Parent),
+			c.toGoPath(t.Import.File),
 			t.Import.Alias,
 		)
 
-		importPkg, err := c.createPackage(t.Import.Parent, level+1)
+		importPkg, err := c.createPackage(t.Import.File, level+1)
 		if err != nil {
 			return nil, err
 		}
@@ -429,7 +436,7 @@ func (c *Compiler) resolve(pkg *goPackage, t *Type, level int) (*goType, error) 
 		base := t.Base()
 		importedType := importPkg.types[base.Name]
 		if importedType == nil {
-			return nil, fmt.Errorf("'%s' could not resolve type '%s' in '%s'", t.File.Path, base.Name, importedType.t.File.Path)
+			return nil, fmt.Errorf("'%s' could not resolve type '%s' in '%s'", t.File.Path, base.Name, t.File.Path)
 		}
 
 		// Handle imported type
@@ -637,7 +644,7 @@ func (c *Compiler) isPointerType(t *Type) bool {
 	}
 }
 
-func (c *Compiler) writeComments(b *Builder, comments []string) {
+func (c *Compiler) genComments(b *Builder, comments []string) {
 	if len(comments) == 0 {
 		return
 	}
@@ -730,12 +737,12 @@ func (c *Compiler) goTypeName(t *Type) string {
 }
 
 func (c *Compiler) genEnum(file *goPackage, t *goType, b *Builder) error {
-	c.writeComments(b, t.t.Comments)
+	c.genComments(b, t.t.Comments)
 	b.W("type %s %s\n", t.name, t.enum.value.name)
 
 	b.W("const (")
 	for i, option := range t.enum.options {
-		c.writeComments(b, option.option.Comments)
+		c.genComments(b, option.option.Comments)
 		b.W("    %s = %s(%d)", option.name, t.name, option.option.Value)
 		if i < len(t.enum.options)-1 {
 			b.W("")
@@ -748,7 +755,7 @@ func (c *Compiler) genEnum(file *goPackage, t *goType, b *Builder) error {
 func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	//_ = c.genStruct(file, t, mut, b)
 	st := t.st
-	c.writeComments(b, t.t.Comments)
+	c.genComments(b, t.t.Comments)
 	name := t.name
 	if mut {
 		name = t.mut
@@ -928,16 +935,16 @@ func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Build
 			continue
 		}
 		if mut {
-			c.writeFieldSetter(b, t, field, order)
-			c.writeFieldGetter(mut, b, t, field, order)
+			c.genStructFieldSetter(b, t, field, order)
+			c.genStructFieldGetter(mut, b, t, field, order)
 		} else {
-			c.writeFieldGetter(mut, b, t, field, order)
+			c.genStructFieldGetter(mut, b, t, field, order)
 		}
 	}
 	return nil
 }
 
-func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField, order binary.ByteOrder) {
+func (c *Compiler) genStructFieldGetter(mut bool, b *Builder, st *goType, f *goField, order binary.ByteOrder) {
 	goStructName := st.name
 	if mut {
 		goStructName = st.mut
@@ -952,7 +959,7 @@ func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField
 	if mut {
 		getBuffer = fmt.Sprintf("s.%s", st.name)
 	}
-	c.writeComments(b, f.field.Type.Comments)
+	c.genComments(b, f.field.Type.Comments)
 
 	if f.field.Type.Optional {
 		/*
@@ -993,12 +1000,12 @@ func (c *Compiler) writeFieldGetter(mut bool, b *Builder, st *goType, f *goField
 	}
 }
 
-func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField, order binary.ByteOrder) {
+func (c *Compiler) genStructFieldSetter(b *Builder, st *goType, f *goField, order binary.ByteOrder) {
 	//embeddedStructName := st.name
 	goStructName := st.mut
 	fieldName := f.public
 	typeName := f.t.name
-	c.writeComments(b, f.field.Type.Comments)
+	c.genComments(b, f.field.Type.Comments)
 
 	getBuffer := fmt.Sprintf("s.%s", st.name)
 
@@ -1063,7 +1070,7 @@ func (c *Compiler) writeFieldSetter(b *Builder, st *goType, f *goField, order bi
 
 func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	st := t.st
-	c.writeComments(b, t.t.Comments)
+	c.genComments(b, t.t.Comments)
 	W := b.W
 
 	headerName := ""
@@ -1304,7 +1311,7 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder, o
 					W("}")
 				}
 			} else {
-				if field.isPointer {
+				if field.isPointer || field.t.t.Kind == KindBytes {
 					W("func (s *%s) %s() *%s {", t.name, field.public, field.t.name)
 					W("    return &s.%s", field.private)
 					W("}")
@@ -1320,7 +1327,7 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder, o
 	return nil
 }
 
-func (c *Compiler) genList(t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
+func (c *Compiler) genArrayList(t *goType, mut bool, b *Builder, order binary.ByteOrder) error {
 	if t.list == nil {
 		return errors.New("type is not a list")
 	}
@@ -1624,23 +1631,23 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteO
 			W("}")
 		}
 
-		W("func (s *%s) Unsafe() string {", t.name)
-		W("    return *(*string)(unsafe.Pointer(&reflect.StringHeader{")
-		W("        Data: uintptr(unsafe.Pointer(&s[0])),")
-		if sizeBytes == 1 {
-			W("        Len: int(s[%d]),", sizeIndex)
+		W("func (s *%s) StringClone() string {", t.name)
+		if t.t.Kind == KindBytes {
+			W("    b := s[0:%d]", t.t.Len)
+			W("    return string(b)")
 		} else {
-			W("        Len: int(*(*uint16)(unsafe.Pointer(&s[%d]))),", sizeIndex)
-			//W("        Len: int(uint16(s[%d]) | uint16(s[%d]) << 8),", sizeIndex, sizeIndex+1)
+			W("    b := s[0:s.Len()]")
+			W("    return string(b)")
 		}
-		W("    }))")
 		W("}")
 
 		W("func (s *%s) String() string {", t.name)
-		if sizeBytes == 1 {
-			W("    return string(s[0:s[%d]])", sizeIndex)
+		if t.t.Kind == KindBytes {
+			W("    b := s[0:%d]", t.t.Len)
+			W("    return *(*string)(unsafe.Pointer(&b))")
 		} else {
-			W("    return string(s[0:s.Len()])")
+			W("    b := s[0:s.Len()]")
+			W("    return *(*string)(unsafe.Pointer(&b))")
 		}
 		W("}")
 
@@ -1678,8 +1685,9 @@ func (c *Compiler) genString(t *goType, mut bool, b *Builder, order binary.ByteO
 		W("}")
 
 		W("func (s *%s) MarshalBinary() ([]byte, error) {", t.name)
-		W("    var v []byte")
-		W("    return append(v, (*(*[%d]byte)(unsafe.Pointer(&s)))[0:]...), nil", t.t.Size)
+		//W("    var v []byte")
+		//W("    return append(v, (*(*[%d]byte)(unsafe.Pointer(&s)))[0:]...), nil", t.t.Size)
+		W("    return s[0:s.Len()], nil")
 		W("}")
 
 		W("func (s *%s) UnmarshalBinary(b []byte) error {", t.name)

@@ -2,6 +2,16 @@
 
 package common
 
+type Direction byte
+
+const (
+	Direction_Down = Direction(0)
+
+	Direction_Sideways = Direction(1)
+
+	Direction_Up = Direction(2)
+)
+
 type Resolution int64
 
 const (
@@ -62,14 +72,4 @@ const (
 	Resolution_D = Resolution(86400000)
 
 	Resolution_W = Resolution(604800000)
-)
-
-type Direction byte
-
-const (
-	Direction_Down = Direction(0)
-
-	Direction_Sideways = Direction(1)
-
-	Direction_Up = Direction(2)
 )

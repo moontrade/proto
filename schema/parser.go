@@ -4,8 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -24,20 +28,159 @@ type Parser struct {
 
 type Expression string
 
-func Parse(path, content string) (*File, error) {
+func loadFromFS(dirOrFile string) (*Schema, error) {
+	root, err := os.Stat(dirOrFile)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &Schema{}
+
+	// Load schema files
+	if root.IsDir() {
+		//dirs := make(map[string]*Dir)
+		result.Files = make(map[string]*File)
+
+		if err = filepath.Walk(dirOrFile, func(path string, info fs.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(path, FileSuffix) {
+				return nil
+			}
+
+			if err != nil {
+				return err
+			}
+			if path == dirOrFile {
+				return nil
+			}
+
+			var (
+				rel  string
+				mark int
+			)
+
+			rel, err = filepath.Rel(dirOrFile, path)
+			if len(rel) == 0 {
+				return nil
+			}
+			if rel[0] == os.PathSeparator {
+				rel = rel[1:]
+			}
+
+			for i, c := range rel {
+				if c == os.PathSeparator {
+					//name := rel[mark:i]
+					mark = i + 1
+					//dir := dirs[rel[0:i]]
+					//if dir == nil {
+					//	dir = &Dir{}
+					//	dir.Parent = parent
+					//	dir.Name = name
+					//	dir.Path = rel[0:i]
+					//	dirs[dir.Path] = dir
+					//}
+					//if parent.Dirs == nil {
+					//	parent.Dirs = make(map[string]*Dir)
+					//}
+					//parent.Dirs[dir.Name] = dir
+					//parent = dir
+				}
+			}
+
+			name := rel[mark:]
+			dir := rel[0:mark]
+			if len(dir) > 0 && dir[len(dir)-1] == os.PathSeparator {
+				dir = dir[0 : len(dir)-1]
+			}
+			if len(name) > 0 {
+				var (
+					file *File
+					data []byte
+				)
+				data, err = os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+
+				file, err = ParseFile(rel, name, data)
+				result.Files[rel] = file
+				if err != nil {
+					if file != nil {
+						file.Dir = dir
+						file.Err = err
+					}
+					result.Errors = append(result.Errors, err)
+				} else {
+					result.Files[rel] = file
+					file.Name = name
+					file.Dir = dir
+				}
+				//if info.IsDir() {
+				//	dir := &Dir{}
+				//	dir.Parent = parent
+				//	dir.Name = name
+				//	dir.Path = rel
+				//	//dirs[dir.Path] = dir
+				//
+				//	if parent.Dirs == nil {
+				//		parent.Dirs = make(map[string]*Dir)
+				//	}
+				//	parent.Dirs[dir.Name] = dir
+				//} else {
+				//	//file := &FileData{
+				//	//	Dir:  parent,
+				//	//	Name: name,
+				//	//	Path: rel,
+				//	//}
+				//
+				//}
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	} else if strings.HasSuffix(dirOrFile, FileSuffix) {
+		var (
+			file *File
+			data []byte
+		)
+		data, err = os.ReadFile(dirOrFile)
+		if err != nil {
+			return nil, err
+		}
+		file, err = ParseFile(dirOrFile, dirOrFile, data)
+		result.Files[dirOrFile] = file
+		if err != nil {
+			if file != nil {
+				file.Err = err
+			}
+			result.Errors = append(result.Errors, err)
+		} else {
+			result.Files = make(map[string]*File)
+		}
+	}
+
+	if len(result.Errors) > 0 {
+		return result, result.Errors[0]
+	}
+	return result, nil
+}
+
+func ParseFile(path, name string, content []byte) (*File, error) {
 	p := &Parser{
-		content: content,
+		content: *(*string)(unsafe.Pointer(&content)),
 		file: &File{
-			Package: PackageName(path),
-			Path:    path,
-			Types:   make(map[string]*Type),
+			Package:      PackageName(path),
+			Path:         path,
+			Name:         name,
+			Content:      *(*string)(unsafe.Pointer(&content)),
+			contentBytes: content,
+			Types:        make(map[string]*Type),
 		},
 	}
 	return p.Parse()
-}
-
-func ParseBytes(path string, b []byte) (*File, error) {
-	return Parse(path, string(b))
 }
 
 // Returns the next line to parse
@@ -348,7 +491,8 @@ loop:
 		alias = name
 	}
 	return &Import{
-		File: p.file,
+		Parent: p.file,
+		//File: p.file,
 		Line: Line{
 			Number: p.lineCount,
 			Begin:  p.mark,
@@ -1610,7 +1754,7 @@ func (p *Parser) parseEnum(line string, comments []string) (*Enum, error) {
 							mark = i + 1
 							continue
 						}
-						option.Value, err = ParseInt(enum.Type.Element.Kind, line[mark:])
+						option.Value, err = ParseInt(enum.Type.Element.Kind, line[mark:i])
 						if err != nil {
 							return nil, p.error("invalid integer type for option")
 						}
@@ -1620,7 +1764,7 @@ func (p *Parser) parseEnum(line string, comments []string) (*Enum, error) {
 						if count == 0 {
 							return nil, p.error("expected an integer value for option")
 						}
-						option.Value, err = ParseInt(enum.Type.Element.Kind, line[mark:])
+						option.Value, err = ParseInt(enum.Type.Element.Kind, line[mark:i])
 						if err != nil {
 							return nil, p.error("invalid integer type for option")
 						}

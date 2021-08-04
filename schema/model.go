@@ -25,12 +25,15 @@ const (
 	KindString  = Kind(12)
 	KindBytes   = Kind(13)
 	KindStruct  = Kind(30) // User-defined structure
-	KindEnum    = Kind(31) // User-defined
-	KindUnion   = Kind(33) // User-defined
-	KindList    = Kind(40)
-	KindMap     = Kind(50)
+	KindEnum    = Kind(31) // User-defined enum
+	KindUnion   = Kind(33) // User-defined union
+	KindMessage = Kind(40) // User-defined message
+	KindList    = Kind(50)
+	KindMap     = Kind(60)
 	KindPad     = Kind(100) // struct alignment padding
 )
+
+type ProtoBufKind byte
 
 func (k Kind) Size() int {
 	switch k {
@@ -82,70 +85,6 @@ type Line struct {
 	End    int
 }
 
-type Type struct {
-	Line         Line
-	File         *File
-	Kind         Kind
-	Optional     bool
-	Resolved     bool
-	Size         int
-	Len          int // Max length if collection (list or map) or string
-	HeaderSize   int
-	HeaderOffset int
-	Padding      int
-	Element      *Type // List element or Map key type
-	Value        *Type // Value type if map type
-	ItemSize     int
-	Import       *Import
-	Name         string       // Name of type
-	Comments     []string     // Comments
-	Description  string       // Description are comments to the right of certain declarations
-	Const        *Const       // Const if type represents a single const
-	Struct       *Struct      // Struct for 'KindStruct'
-	Field        *Field       // Field
-	Union        *Union       // Union for 'KindUnion'
-	UnionOption  *UnionOption // UnionOption if type represents a single union option
-	Enum         *Enum        // Enum for 'KindEnum'
-	EnumOption   *EnumOption  // EnumOption if type represents a single enum option
-	Init         interface{}  // Initial value
-}
-
-type File struct {
-	Name        string
-	Path        string
-	Package     string
-	Hash        uint64
-	Err         error
-	Content     string
-	Imports     []*Imports
-	Consts      []*Const
-	Structs     []*Struct
-	Enums       []*Enum
-	Unions      []*Union
-	Lists       map[string][]*Type
-	Types       map[string]*Type
-	ImportMap   map[string]*Import
-	Strings     map[string][]*Type
-	GlobalLists map[string][]*Type
-}
-
-type Imports struct {
-	Line     Line
-	Comments []string
-	List     []*Import
-}
-
-type Import struct {
-	Imports  *Imports
-	Parent   *File
-	Path     string
-	Name     string
-	Alias    string
-	File     *File
-	Comments []string
-	Line     Line
-}
-
 type Enum struct {
 	Name      string
 	Type      *Type
@@ -183,18 +122,18 @@ type Const struct {
 	Type *Type
 }
 
-type Struct struct {
+type Message struct {
 	Name      string
 	Type      *Type
-	Fields    []*Field
-	FieldMap  map[string]*Field
-	Optionals []*Field
+	Fields    []*MessageField
+	FieldMap  map[string]*MessageField
+	Optionals []*MessageField
 	Version   int64
 }
 
-type Field struct {
+type MessageField struct {
 	Number    int
-	Struct    *Struct
+	Owner     *Message
 	Name      string
 	Type      *Type
 	Offset    int
@@ -236,11 +175,6 @@ type UnionOption struct {
 	Comments []string
 }
 
-// Validate
-func (f *File) Validate() error {
-	return nil
-}
-
 type ImportedName struct {
 	Package string
 	Name    string
@@ -249,6 +183,9 @@ type ImportedName struct {
 func KindOf(name string) Kind {
 	if strings.Index(name, "string") == 0 {
 		return KindString
+	}
+	if strings.Index(name, "bytes") == 0 {
+		return KindBytes
 	}
 
 	switch name {

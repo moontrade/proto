@@ -16,7 +16,7 @@ type VarHeader struct {
 func TestPage_Bytes(t *testing.T) {
 	printLayout(VarHeader{ID: 1, ID2: 2, Size: 3})
 	fmt.Println()
-	printLayout(Block{})
+	printLayout(Block64{})
 	printLayout(BlockHeader{})
 
 	b := make([]byte, 8)

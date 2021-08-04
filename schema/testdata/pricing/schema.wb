@@ -8,8 +8,8 @@ struct Candle {
 
 struct Spread {
 	low 	f64		// Low spread
-	mid 	f64		// Mid spread
 	high 	f64		// High spread
+	avg 	f64		// Avg spread
 }
 
 struct Liquidations {
@@ -57,16 +57,16 @@ struct Greeks {
 	rho		f64
 }
 
-struct Volume {
-	total		f64		// Volume (sales)
-	buy			VolumeSide
-	sell		VolumeSide
+struct Ticks {
+	total	i64
+	up		i64
+	down	i64
 }
 
-struct VolumeSide {
-	total		f64
-	interest	f64
-	percent		f64
+struct Volume {
+	total	f64
+	buy		f64
+	sell	f64
 }
 
 struct Time {
@@ -80,45 +80,39 @@ struct Trades {
 	max			i64		// Max-trade ID (broker specific)
 }
 
+enum Aggressor : i32 {
+	Buy = 0
+	Sell = 1
+}
+
+struct Trade {
+	id			i64
+	price		f64
+	quantity	f64
+	aggressor 	Aggressor
+}
+
 struct Bar {
-	time			Time			// Time
-	precision   	f64				// Precision
-	price 			Candle			// Price candle / Mid-point
-	bid 			Candle			// Bid candle
-	ask 			Candle			// Ask candle
-	spread 			Spread			// Spread
-	ticks 			i64				// Ticks
-	volume 			Volume			// Volume
-	trades 			Trades			// Trades
-    greeks			Greeks			// Greeks
-    liquidations 	Liquidations 	// Liquidations
+	start 			i64			// Start timestamp (UTC unix millis)
+    end 			i64			// End timestamp (UTC unix millis)
+	price 			Candle		// Price candle / Mid-point
+	bid 			Candle		// Bid candle
+	ask 			Candle		// Ask candle
+	spread 			Spread		// Spread
+	ticks 			Ticks		// Ticks
+	volume 			Volume		// Volume
+	interest		Volume		// Open interest
 }
 
-struct FXBar {
-	start		i64
-	end			i64
-	precision 	f64
-	mid 		Candle			// Price candle / Mid-point
-    bid 		Candle			// Bid candle
-    ask 		Candle			// Ask candle
-    ticks		i64
-    longs		f32
-    shorts		f32
-}
-
-struct FUTBar {
-	start		i64
-	end			i64
-	precision 	f64
-	mid 		Candle			// Price candle / Mid-point
-	bid 		Candle			// Bid candle
-	ask 		Candle			// Ask candle
-	open		i64
-	volume		i64
-	buy			i64
-	sell		i64
-}
-
-struct XBar {
-
+struct OptionBar {
+	start 			i64			// Start timestamp (UTC unix millis)
+    end 			i64			// End timestamp (UTC unix millis)
+	price 			Candle		// Price candle / Mid-point
+	bid 			Candle		// Bid candle
+	ask 			Candle		// Ask candle
+	spread 			Spread		// Spread
+	ticks 			Ticks		// Ticks
+	volume 			Volume		// Volume
+	interest		Volume		// Open interest
+	greeks			Greeks		// Greeks
 }

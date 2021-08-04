@@ -169,45 +169,43 @@ func init() {
 		b[0] = byte(v)
 		b[1] = byte(v >> 8)
 		if *(*uint16)(unsafe.Pointer(&b[0])) != 1 {
-			panic("BigEndian detected... compiled for LittleEndian only!!!")
+			panic("BigEndian not supported")
 		}
 	}
-	to := reflect.TypeOf
-	type sf struct {
-		n string
-		o uintptr
-		s uintptr
+	type b struct {
+		n    string
+		o, s uintptr
 	}
-	ss := func(tt interface{}, mtt interface{}, s uintptr, fl []sf) {
-		t := to(tt)
-		mt := to(mtt)
+	a := func(x interface{}, y interface{}, s uintptr, z []b) {
+		t := reflect.TypeOf(x)
+		r := reflect.TypeOf(y)
 		if t.Size() != s {
 			panic(fmt.Sprintf("sizeof %s = %d, expected = %d", t.Name(), t.Size(), s))
 		}
-		if mt.Size() != s {
-			panic(fmt.Sprintf("sizeof %s = %d, expected = %d", mt.Name(), mt.Size(), s))
+		if r.Size() != s {
+			panic(fmt.Sprintf("sizeof %s = %d, expected = %d", r.Name(), r.Size(), s))
 		}
-		if t.NumField() != len(fl) {
-			panic(fmt.Sprintf("%s field count = %d: expected %d", t.Name(), t.NumField(), len(fl)))
+		if t.NumField() != len(z) {
+			panic(fmt.Sprintf("%s field count = %d: expected %d", t.Name(), t.NumField(), len(z)))
 		}
-		for i, ef := range fl {
+		for i, e := range z {
 			f := t.Field(i)
-			if f.Offset != ef.o {
-				panic(fmt.Sprintf("%s.%s offset = %d, expected = %d", t.Name(), f.Name, f.Offset, ef.o))
+			if f.Offset != e.o {
+				panic(fmt.Sprintf("%s.%s offset = %d, expected = %d", t.Name(), f.Name, f.Offset, e.o))
 			}
-			if f.Type.Size() != ef.s {
-				panic(fmt.Sprintf("%s.%s size = %d, expected = %d", t.Name(), f.Name, f.Type.Size(), ef.s))
+			if f.Type.Size() != e.s {
+				panic(fmt.Sprintf("%s.%s size = %d, expected = %d", t.Name(), f.Name, f.Type.Size(), e.s))
 			}
-			if f.Name != ef.n {
-				panic(fmt.Sprintf("%s.%s expected field: %s", t.Name(), f.Name, ef.n))
+			if f.Name != e.n {
+				panic(fmt.Sprintf("%s.%s expected field: %s", t.Name(), f.Name, e.n))
 			}
 		}
 	}
 
-	ss(Plot{}, PlotMut{}, 1, []sf{
+	a(Plot{}, PlotMut{}, 1, []b{
 		{"_", 0, 1},
 	})
-	ss(Fill{}, FillMut{}, 1, []sf{
+	a(Fill{}, FillMut{}, 1, []b{
 		{"_", 0, 1},
 	})
 

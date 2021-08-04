@@ -7,28 +7,28 @@ import (
 )
 
 func TestNewGenerator(t *testing.T) {
-	c, err := NewSchema(&Config{
-		Path: "./testdata",
-	})
-
+	var (
+		err      error
+		p        *Schema
+		compiler *Compiler
+	)
+	p, err = LoadFromFS("./testdata", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	goCompiler, err := NewCompiler(c, &GoConfig{
+	if compiler, err = NewCompiler(p, &Config{
 		BigEndian: false,
 		Fluent:    true,
 		Mutable:   true,
-		Package:   "github.com/moontrade/proto/compile/go/testdata/go",
-		Output:    "",
-	})
-	if err != nil {
+		Package:   "github.com/moontrade/proto/compile/go/testdata",
+		Output:    "./testdata",
+	}); err != nil {
 		t.Fatal(err)
 	}
-	err = goCompiler.Compile()
-	if err != nil {
+	if err = compiler.Compile(); err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println(c)
+	fmt.Println(p)
 }

@@ -5,12 +5,12 @@ enum StreamKind : byte {
 }
 
 enum SchemaKind : byte {
-	Bytes		= 0
-	Wasmbuf		= 1
-	Protobuf	= 2
-	Flatbuffers	= 3
-	Json		= 4
-	Msgpack		= 5
+	Bytes			= 0		// Raw bytes
+	MoonBuf			= 1		// MoonBuf structures
+	ProtoBuf		= 2		// Protocol buffers
+	FlatBuffers		= 3		// FlatBuffers
+	Json			= 4		// Json
+	MessagePack		= 5		// MessagePack
 }
 
 struct Stream {
@@ -18,11 +18,12 @@ struct Stream {
 	created		i64			// Unix timestamp of creation in nanoseconds
 	accountID	i64			// AccountID that owns the stream
 	duration	i64			// Duration of a single record. Only used if kind == Series
-	record 		i32			// Record size
 	name		string32	// Optional name
+	record 		i32			// Record size
 	kind		StreamKind	// Kind of stream
 	schema		SchemaKind	// Schema serialization format
-	realTime	bool		// Stream does not extend past the immediate present
+	realTime	bool		// Stream is appended in real-time
+	blockSize	byte		// Size of default blocks (1, 2, 4, 8, 16, 32, 64)
 }
 
 struct AccountStats {
@@ -57,31 +58,63 @@ enum Compression : byte {
 
 // BlockHeader
 struct BlockHeader {
-	id			BlockID			// StreamID
+	streamID	i64				// Stream ID
+	id			i64				// Block ID / Seq
 	created		i64				// Unix Timestamp of creation in nanoseconds
 	completed	i64				// Unix Timestamp of completion in nanoseconds
 	min			i64				// Min record ID
 	max			i64				// Max record ID
 	start		i64				// Min timestamp
 	end			i64				// Max timestamp
-	storage		u64				// Cumulative storage usage including this block
-	storageU	u64				// Cumulative storage usage including this block when uncompressed
-	count		u16				// Number of records
-	size		u16				// Size of current data buffer
-	sizeU		u16				// Size of data when uncompressed
-	sizeX		u16				// Size of data when compressed
-	record		u16				// Size of record. 0 = variable length
-	encoding	Compression		// Compression algorithm used
-	kind		StreamKind		// Kind of Stream (e.g. Log, Time-Series, or Table)
-	schema		SchemaKind		// Kind of serialization format
-	realTime	bool			// Stream is real-time or time-traveler
-	//pad			bytes6			// Pad
+	savepoint	i64				// Current savepoint Block ID
+	count		i32				// Number of records
+	seq			i32				// Sequence number of first record
+	size		i32				// Size of current data buffer
+	sizeU		i32				// Size of data when uncompressed
+	sizeX		i32				// Size of data when compressed
+	compression	Compression		// Compression algorithm used
 }
 
-// Block
-struct Block {
-	header		BlockHeader		// Header
-	data		bytes65160		// Data
+// Block64
+struct Block64 {
+	head		BlockHeader		// Header
+	body		bytes65456		// Data
+}
+
+// Block32
+struct Block32 {
+	head		BlockHeader		// Header
+	body		bytes32688		// Data
+}
+
+// Block16
+struct Block16 {
+	head		BlockHeader		// Header
+	body		bytes16306		// Data
+}
+
+// Block8
+struct Block8 {
+	head		BlockHeader		// Header
+	body		bytes8112		// Data
+}
+
+// Block4
+struct Block4 {
+	head		BlockHeader		// Header
+	body		bytes4016		// Data
+}
+
+// Block2
+struct Block2 {
+	head		BlockHeader		// Header
+	body		bytes1968		// Data
+}
+
+// Block1
+struct Block1 {
+	head		BlockHeader		// Header
+	body		bytes944		// Data
 }
 
 struct RecordID {
@@ -90,35 +123,16 @@ struct RecordID {
 	id			i64
 }
 
-// EOS = End of Stream
-// The reader is caught up on the stream and is NOT subscribed
-// to new records.
-struct EOS {
-	recordID	RecordID
-	timestamp	i64
-}
-
-// EOSWaiting = End of Stream Waiting for next record.
-// The reader is caught up on the stream and is subscribed
-// to new records.
-struct EOSWaiting {
-	recordID	RecordID
-	timestamp	i64
-}
-
 enum MessageType : byte {
 	Record 			= 1
-	Records 		= 2
-	Block 			= 3
-	EOS 			= 4
-	EOSWaiting 		= 5
-	Savepoint 		= 6
-	Starting 		= 7
+	Block 			= 2
+	EOS 			= 3
+	EOB 			= 4
+	Savepoint 		= 5
+	Starting 		= 6
+	Progress		= 7
 	Started 		= 8
 	Stopped 		= 9
-	SyncStarted 	= 10
-	SyncProgress 	= 11
-	SyncStopped 	= 12
 }
 
 enum StopReason : byte {
@@ -129,63 +143,62 @@ enum StopReason : byte {
 	// Stream is being migrated to a new writer
 	Migrate 	= 3
 	// Stream has stopped unexpectedly
-	Unexpected 	= 4
+	Error	 	= 4
 }
 
 struct RecordHeader {
-	blockID		BlockID
+	streamID	i64
+	blockID		i64
 	id			i64
-	prevID		i64
 	timestamp	i64
 	start		i64
 	end			i64
+	savepoint	i64
+	savepointR	i64
 	seq			u16
-	sizeU		u16
 	size		u16
-	encoding	Compression
-	pad			bool
-}
-
-struct RecordsHeader {
-	header 	RecordHeader
-	count 	u16
-	record 	u16
+	sizeU		u16
+	sizeX		u16
+	compression	Compression
+	eob			bool
 }
 
 struct Savepoint {
 	recordID		RecordID
 	timestamp		i64
-	duration		i64
+	writerID		i64			// ID of current writer that is appending the stream
 }
 
-struct SyncStarted {
+// End of Stream
+// The reader is caught up on the stream.
+struct EOS {
 	recordID	RecordID
 	timestamp	i64
+	writerID	i64			// ID of current writer that is appending the stream
+	closed		bool
+	waiting		bool
 }
 
-struct SyncProgress {
+// End of Block
+struct EOB {
 	recordID	RecordID
 	timestamp	i64
-	started		i64
-	count		i64
-	remaining	i64
-}
-
-enum SyncStoppedReason : byte {
-	Success = 1
-	Error = 2
-}
-
-struct SyncStopped {
-	progress 	SyncProgress
-	reason		SyncStoppedReason
-	message		string64
+	savepoint	i64
 }
 
 struct Starting {
 	recordID	RecordID	// Max record ID
 	timestamp	i64			// Unix timestamp when message was created
 	writerID	i64			// ID of current writer that is appending the stream
+}
+
+struct Progress {
+	recordID	RecordID
+	timestamp	i64
+	writerID	i64			// ID of current writer that is appending the stream
+	started		i64
+	count		i64
+	remaining	i64
 }
 
 struct Started {
@@ -198,6 +211,6 @@ struct Started {
 struct Stopped {
     recordID		RecordID
 	timestamp		i64				// Unix timestamp when message was created
-	reason			StopReason		// Reason stream was stopped
 	starts			i64				// Unix timestamp when stream is expected to start again
+	reason			StopReason		// Reason stream was stopped
 }
