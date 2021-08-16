@@ -47,18 +47,6 @@ func DivRoundUp(n, a uintptr) uintptr {
 
 func PackageName(path string) string {
 	return filepath.Base(filepath.Dir(path))
-	//name := filepath.Base(path)
-	//index := strings.Index(name, ".")
-	//if index > -1 {
-	//	name = strings.TrimSpace(name[0:index])
-	//} else {
-	//	name = strings.TrimSpace(name)
-	//}
-	//switch path {
-	//case ".", "_":
-	//	return filepath.Dir(path)
-	//}
-	//return name
 }
 
 func Align(t *Type) int {
@@ -124,6 +112,16 @@ func StartsWith(val string, s string) bool {
 	return val[0:len(s)] == s
 }
 
+func Join(left, right string) string {
+	if len(left) == 0 {
+		return right
+	}
+	if len(right) == 0 {
+		return left
+	}
+	return filepath.Join(left, right)
+}
+
 func RelativePath(base, relative string) string {
 	dir := base
 	if len(filepath.Ext(base)) > 0 {
@@ -136,17 +134,17 @@ func RelativePath(base, relative string) string {
 	if relative[0] == '/' {
 		return relative
 	}
-	if strings.Index(relative, "./") == 0 {
-		return filepath.Join(dir, relative[2:])
+	if StartsWith(relative, "./") {
+		return Join(dir, relative[2:])
 	}
-	for strings.Index(relative, "../") == 0 {
+	for StartsWith(relative, "../") {
 		if len(dir) < 2 {
 			return ""
 		}
 		dir = filepath.Dir(dir)
 		relative = relative[3:]
 	}
-	return filepath.Join(dir, relative)
+	return Join(dir, relative)
 }
 
 func IsValidName(n string) bool {
@@ -164,7 +162,7 @@ func IsValidName(n string) bool {
 	return true
 }
 
-func IsValidFirst(c int32) bool {
+func IsValidFirst(c rune) bool {
 	switch c {
 	case '_', 'a', 'A', 'b', 'B', 'c', 'C', 'd', 'D', 'e', 'E', 'f', 'F', 'g', 'G', 'h', 'H',
 		'i', 'I', 'j', 'J', 'k', 'K', 'l', 'L', 'm', 'M', 'n', 'N', 'o', 'O', 'p', 'P', 'q', 'Q',
@@ -175,7 +173,7 @@ func IsValidFirst(c int32) bool {
 	}
 }
 
-func IsValidNameCharacter(c int32) bool {
+func IsValidNameCharacter(c rune) bool {
 	switch c {
 	case '_', 'a', 'A', 'b', 'B', 'c', 'C', 'd', 'D', 'e', 'E', 'f', 'F', 'g', 'G', 'h', 'H',
 		'i', 'I', 'j', 'J', 'k', 'K', 'l', 'L', 'm', 'M', 'n', 'N', 'o', 'O', 'p', 'P', 'q', 'Q',

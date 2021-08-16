@@ -24,7 +24,7 @@ func TestParser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file, err := ParseBytes(f.Name(), bytes)
+	file, err := ParseFile(f.Name(), f.Name(), bytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestParser(t *testing.T) {
 }
 
 func TestConst(t *testing.T) {
-	file, err := ParseFile("", `
+	file, err := ParseFile("", "", []byte(`
 package model
 
 import (
@@ -79,7 +79,7 @@ enum Code : byte {
 	Open = 0
 	Close = 1
 }
-`)
+`))
 	if err != nil {
 		t.Fatal(err)
 	}

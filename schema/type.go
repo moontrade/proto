@@ -20,7 +20,7 @@ type Type struct {
 	Description  string       // Description are comments to the right of certain declarations
 	Const        *Const       // Const if type represents a single const
 	Struct       *Struct      // Struct for 'KindStruct'
-	Field        *Field       // Field
+	Field        *StructField // Field
 	Union        *Union       // Union for 'KindUnion'
 	UnionOption  *UnionOption // UnionOption if type represents a single union option
 	Enum         *Enum        // Enum for 'KindEnum'

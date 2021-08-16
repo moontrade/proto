@@ -6,24 +6,25 @@ enum StreamKind : byte {
 
 enum SchemaKind : byte {
 	Bytes			= 0		// Raw bytes
-	MoonBuf			= 1		// MoonBuf structures
+	MoonStruct		= 1		// MoonBuf Structure
+	MoonMessage		= 1		// MoonBuf Message
 	ProtoBuf		= 2		// Protocol buffers
-	FlatBuffers		= 3		// FlatBuffers
+	FlatBuf			= 3		// FlatBuffers
 	Json			= 4		// Json
 	MessagePack		= 5		// MessagePack
 }
 
 struct Stream {
-	id			i64			// StreamID
-	created		i64			// Unix timestamp of creation in nanoseconds
-	accountID	i64			// AccountID that owns the stream
-	duration	i64			// Duration of a single record. Only used if kind == Series
-	name		string32	// Optional name
-	record 		i32			// Record size
-	kind		StreamKind	// Kind of stream
-	schema		SchemaKind	// Schema serialization format
-	realTime	bool		// Stream is appended in real-time
-	blockSize	byte		// Size of default blocks (1, 2, 4, 8, 16, 32, 64)
+	1	id			i64			// StreamID
+	2	created		i64			// Unix timestamp of creation in nanoseconds
+	3	accountID	i64			// AccountID that owns the stream
+	4	duration	i64			// Duration of a single record. Only used if kind == Series
+	5	name		string32	// Optional name
+	6	record 		i32			// Record size
+	7	kind		StreamKind	// Kind of stream
+	8	schema		SchemaKind	// Schema serialization format
+	9	realTime	bool		// Stream is appended in real-time
+	10	blockSize	byte		// Size of default blocks (1, 2, 4, 8, 16, 32, 64)
 }
 
 struct AccountStats {

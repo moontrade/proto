@@ -17,7 +17,6 @@ const (
 )
 
 type File struct {
-	//Dir       *Dir
 	Dir          string
 	Name         string
 	Path         string
@@ -159,7 +158,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			return fmt.Errorf("%s:%d lists must specify a length greater than 0", f.Path, t.Line.Number)
 		}
 
-		t.Name = f.createTypeName(t, 0)
+		t.Name = f.createTypeName(t, cycle+1)
 		t.Size = t.Element.Size * t.Len
 		t.ItemSize = t.Element.Size
 		if t.Len <= 255 {
@@ -242,6 +241,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			return fmt.Errorf("%s:%d invalid state: type of struct had a nil struct", f.Path, t.Line.Number)
 		}
 		for _, field := range t.Struct.Fields {
+			// Is type imported?
 			if field.Type.Import != nil {
 				if field.Type.Import.File != nil {
 					if err := field.Type.Import.File.resolve(); err != nil {
@@ -269,7 +269,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			}
 		}
 
-		fields := make([]*Field, 0, len(t.Struct.Fields))
+		fields := make([]*StructField, 0, len(t.Struct.Fields))
 		//if t.Padding > 0 {
 		//	fields = append(fields, &Field{
 		//		Number: -1,
@@ -309,7 +309,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			// Add padding?
 			if pad > 0 {
 				t.Padding += pad
-				fields = append(fields, &Field{
+				fields = append(fields, &StructField{
 					Number: -1,
 					Struct: t.Struct,
 					Name:   "",
@@ -340,7 +340,7 @@ func (f *File) resolveType(t *Type, cycle int) error {
 		aligned := Align(t)
 		if aligned > t.Size {
 			pad := aligned - t.Size
-			t.Struct.Fields = append(t.Struct.Fields, &Field{
+			t.Struct.Fields = append(t.Struct.Fields, &StructField{
 				Number: -1,
 				Struct: t.Struct,
 				Name:   "",
@@ -359,6 +359,8 @@ func (f *File) resolveType(t *Type, cycle int) error {
 			t.Size = aligned
 		}
 		t.Resolved = true
+
+	case KindMessage:
 
 	case KindUnion:
 		if t.Union == nil {

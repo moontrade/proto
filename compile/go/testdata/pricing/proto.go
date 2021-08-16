@@ -17,6 +17,119 @@ const (
 	Aggressor_Sell = Aggressor(1)
 )
 
+type Trade struct {
+	id        int64
+	price     float64
+	quantity  float64
+	aggressor Aggressor
+	_         [4]byte // Padding
+}
+
+func (s *Trade) String() string {
+	return fmt.Sprintf("%v", s.MarshalMap(nil))
+}
+
+func (s *Trade) MarshalMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		m = make(map[string]interface{})
+	}
+	m["id"] = s.Id()
+	m["price"] = s.Price()
+	m["quantity"] = s.Quantity()
+	m["aggressor"] = s.Aggressor()
+	return m
+}
+
+func (s *Trade) ReadFrom(r io.Reader) (int64, error) {
+	n, err := io.ReadFull(r, (*(*[32]byte)(unsafe.Pointer(s)))[0:])
+	if err != nil {
+		return int64(n), err
+	}
+	if n != 32 {
+		return int64(n), io.ErrShortBuffer
+	}
+	return int64(n), nil
+}
+func (s *Trade) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write((*(*[32]byte)(unsafe.Pointer(s)))[0:])
+	return int64(n), err
+}
+func (s *Trade) MarshalBinaryTo(b []byte) []byte {
+	return append(b, (*(*[32]byte)(unsafe.Pointer(s)))[0:]...)
+}
+func (s *Trade) MarshalBinary() ([]byte, error) {
+	var v []byte
+	return append(v, (*(*[32]byte)(unsafe.Pointer(s)))[0:]...), nil
+}
+func (s *Trade) Read(b []byte) (n int, err error) {
+	if len(b) < 32 {
+		return -1, io.ErrShortBuffer
+	}
+	v := (*Trade)(unsafe.Pointer(&b[0]))
+	*v = *s
+	return 32, nil
+}
+func (s *Trade) UnmarshalBinary(b []byte) error {
+	if len(b) < 32 {
+		return io.ErrShortBuffer
+	}
+	v := (*Trade)(unsafe.Pointer(&b[0]))
+	*s = *v
+	return nil
+}
+func (s *Trade) Clone() *Trade {
+	v := &Trade{}
+	*v = *s
+	return v
+}
+func (s *Trade) Bytes() []byte {
+	return (*(*[32]byte)(unsafe.Pointer(s)))[0:]
+}
+func (s *Trade) Mut() *TradeMut {
+	return (*TradeMut)(unsafe.Pointer(s))
+}
+func (s *Trade) Id() int64 {
+	return s.id
+}
+func (s *Trade) Price() float64 {
+	return s.price
+}
+func (s *Trade) Quantity() float64 {
+	return s.quantity
+}
+func (s *Trade) Aggressor() Aggressor {
+	return s.aggressor
+}
+
+type TradeMut struct {
+	Trade
+}
+
+func (s *TradeMut) Clone() *TradeMut {
+	v := &TradeMut{}
+	*v = *s
+	return v
+}
+func (s *TradeMut) Freeze() *Trade {
+	return (*Trade)(unsafe.Pointer(s))
+}
+func (s *TradeMut) SetId(v int64) *TradeMut {
+	s.id = v
+	return s
+}
+func (s *TradeMut) SetPrice(v float64) *TradeMut {
+	s.price = v
+	return s
+}
+func (s *TradeMut) SetQuantity(v float64) *TradeMut {
+	s.quantity = v
+	return s
+}
+func (s *TradeMut) SetAggressor(v Aggressor) *TradeMut {
+	s.aggressor = v
+	return s
+}
+
 // Candlestick
 type Candle struct {
 	open  float64
@@ -131,106 +244,149 @@ func (s *CandleMut) SetClose(v float64) *CandleMut {
 	return s
 }
 
-type Ticks struct {
-	total int64
-	up    int64
-	down  int64
+// Greeks are financial measures of the sensitivity of an option’s price to its
+// underlying determining parameters, such as volatility or the price of the underlying
+// asset. The Greeks are utilized in the analysis of an options portfolio and in sensitivity
+// analysis of an option or portfolio of options. The measures are considered essential by
+// many investors for making informed decisions in options trading.
+//
+// Delta, Gamma, Vega, Theta, and Rho are the key option Greeks. However, there are many other
+// option Greeks that can be derived from those mentioned above.
+type Greeks struct {
+	iv    float64
+	delta float64
+	gamma float64
+	vega  float64
+	theta float64
+	rho   float64
 }
 
-func (s *Ticks) String() string {
+func (s *Greeks) String() string {
 	return fmt.Sprintf("%v", s.MarshalMap(nil))
 }
 
-func (s *Ticks) MarshalMap(m map[string]interface{}) map[string]interface{} {
+func (s *Greeks) MarshalMap(m map[string]interface{}) map[string]interface{} {
 	if m == nil {
 		m = make(map[string]interface{})
 	}
-	m["total"] = s.Total()
-	m["up"] = s.Up()
-	m["down"] = s.Down()
+	m["iv"] = s.Iv()
+	m["delta"] = s.Delta()
+	m["gamma"] = s.Gamma()
+	m["vega"] = s.Vega()
+	m["theta"] = s.Theta()
+	m["rho"] = s.Rho()
 	return m
 }
 
-func (s *Ticks) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, (*(*[24]byte)(unsafe.Pointer(s)))[0:])
+func (s *Greeks) ReadFrom(r io.Reader) (int64, error) {
+	n, err := io.ReadFull(r, (*(*[48]byte)(unsafe.Pointer(s)))[0:])
 	if err != nil {
 		return int64(n), err
 	}
-	if n != 24 {
+	if n != 48 {
 		return int64(n), io.ErrShortBuffer
 	}
 	return int64(n), nil
 }
-func (s *Ticks) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write((*(*[24]byte)(unsafe.Pointer(s)))[0:])
+func (s *Greeks) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write((*(*[48]byte)(unsafe.Pointer(s)))[0:])
 	return int64(n), err
 }
-func (s *Ticks) MarshalBinaryTo(b []byte) []byte {
-	return append(b, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...)
+func (s *Greeks) MarshalBinaryTo(b []byte) []byte {
+	return append(b, (*(*[48]byte)(unsafe.Pointer(s)))[0:]...)
 }
-func (s *Ticks) MarshalBinary() ([]byte, error) {
+func (s *Greeks) MarshalBinary() ([]byte, error) {
 	var v []byte
-	return append(v, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...), nil
+	return append(v, (*(*[48]byte)(unsafe.Pointer(s)))[0:]...), nil
 }
-func (s *Ticks) Read(b []byte) (n int, err error) {
-	if len(b) < 24 {
+func (s *Greeks) Read(b []byte) (n int, err error) {
+	if len(b) < 48 {
 		return -1, io.ErrShortBuffer
 	}
-	v := (*Ticks)(unsafe.Pointer(&b[0]))
+	v := (*Greeks)(unsafe.Pointer(&b[0]))
 	*v = *s
-	return 24, nil
+	return 48, nil
 }
-func (s *Ticks) UnmarshalBinary(b []byte) error {
-	if len(b) < 24 {
+func (s *Greeks) UnmarshalBinary(b []byte) error {
+	if len(b) < 48 {
 		return io.ErrShortBuffer
 	}
-	v := (*Ticks)(unsafe.Pointer(&b[0]))
+	v := (*Greeks)(unsafe.Pointer(&b[0]))
 	*s = *v
 	return nil
 }
-func (s *Ticks) Clone() *Ticks {
-	v := &Ticks{}
+func (s *Greeks) Clone() *Greeks {
+	v := &Greeks{}
 	*v = *s
 	return v
 }
-func (s *Ticks) Bytes() []byte {
-	return (*(*[24]byte)(unsafe.Pointer(s)))[0:]
+func (s *Greeks) Bytes() []byte {
+	return (*(*[48]byte)(unsafe.Pointer(s)))[0:]
 }
-func (s *Ticks) Mut() *TicksMut {
-	return (*TicksMut)(unsafe.Pointer(s))
+func (s *Greeks) Mut() *GreeksMut {
+	return (*GreeksMut)(unsafe.Pointer(s))
 }
-func (s *Ticks) Total() int64 {
-	return s.total
+func (s *Greeks) Iv() float64 {
+	return s.iv
 }
-func (s *Ticks) Up() int64 {
-	return s.up
+func (s *Greeks) Delta() float64 {
+	return s.delta
 }
-func (s *Ticks) Down() int64 {
-	return s.down
+func (s *Greeks) Gamma() float64 {
+	return s.gamma
+}
+func (s *Greeks) Vega() float64 {
+	return s.vega
+}
+func (s *Greeks) Theta() float64 {
+	return s.theta
+}
+func (s *Greeks) Rho() float64 {
+	return s.rho
 }
 
-type TicksMut struct {
-	Ticks
+// Greeks are financial measures of the sensitivity of an option’s price to its
+// underlying determining parameters, such as volatility or the price of the underlying
+// asset. The Greeks are utilized in the analysis of an options portfolio and in sensitivity
+// analysis of an option or portfolio of options. The measures are considered essential by
+// many investors for making informed decisions in options trading.
+//
+// Delta, Gamma, Vega, Theta, and Rho are the key option Greeks. However, there are many other
+// option Greeks that can be derived from those mentioned above.
+type GreeksMut struct {
+	Greeks
 }
 
-func (s *TicksMut) Clone() *TicksMut {
-	v := &TicksMut{}
+func (s *GreeksMut) Clone() *GreeksMut {
+	v := &GreeksMut{}
 	*v = *s
 	return v
 }
-func (s *TicksMut) Freeze() *Ticks {
-	return (*Ticks)(unsafe.Pointer(s))
+func (s *GreeksMut) Freeze() *Greeks {
+	return (*Greeks)(unsafe.Pointer(s))
 }
-func (s *TicksMut) SetTotal(v int64) *TicksMut {
-	s.total = v
+func (s *GreeksMut) SetIv(v float64) *GreeksMut {
+	s.iv = v
 	return s
 }
-func (s *TicksMut) SetUp(v int64) *TicksMut {
-	s.up = v
+func (s *GreeksMut) SetDelta(v float64) *GreeksMut {
+	s.delta = v
 	return s
 }
-func (s *TicksMut) SetDown(v int64) *TicksMut {
-	s.down = v
+func (s *GreeksMut) SetGamma(v float64) *GreeksMut {
+	s.gamma = v
+	return s
+}
+func (s *GreeksMut) SetVega(v float64) *GreeksMut {
+	s.vega = v
+	return s
+}
+func (s *GreeksMut) SetTheta(v float64) *GreeksMut {
+	s.theta = v
+	return s
+}
+func (s *GreeksMut) SetRho(v float64) *GreeksMut {
+	s.rho = v
 	return s
 }
 
@@ -334,109 +490,6 @@ func (s *VolumeMut) SetBuy(v float64) *VolumeMut {
 }
 func (s *VolumeMut) SetSell(v float64) *VolumeMut {
 	s.sell = v
-	return s
-}
-
-type Trades struct {
-	count int64
-	min   int64
-	max   int64
-}
-
-func (s *Trades) String() string {
-	return fmt.Sprintf("%v", s.MarshalMap(nil))
-}
-
-func (s *Trades) MarshalMap(m map[string]interface{}) map[string]interface{} {
-	if m == nil {
-		m = make(map[string]interface{})
-	}
-	m["count"] = s.Count()
-	m["min"] = s.Min()
-	m["max"] = s.Max()
-	return m
-}
-
-func (s *Trades) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, (*(*[24]byte)(unsafe.Pointer(s)))[0:])
-	if err != nil {
-		return int64(n), err
-	}
-	if n != 24 {
-		return int64(n), io.ErrShortBuffer
-	}
-	return int64(n), nil
-}
-func (s *Trades) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write((*(*[24]byte)(unsafe.Pointer(s)))[0:])
-	return int64(n), err
-}
-func (s *Trades) MarshalBinaryTo(b []byte) []byte {
-	return append(b, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...)
-}
-func (s *Trades) MarshalBinary() ([]byte, error) {
-	var v []byte
-	return append(v, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...), nil
-}
-func (s *Trades) Read(b []byte) (n int, err error) {
-	if len(b) < 24 {
-		return -1, io.ErrShortBuffer
-	}
-	v := (*Trades)(unsafe.Pointer(&b[0]))
-	*v = *s
-	return 24, nil
-}
-func (s *Trades) UnmarshalBinary(b []byte) error {
-	if len(b) < 24 {
-		return io.ErrShortBuffer
-	}
-	v := (*Trades)(unsafe.Pointer(&b[0]))
-	*s = *v
-	return nil
-}
-func (s *Trades) Clone() *Trades {
-	v := &Trades{}
-	*v = *s
-	return v
-}
-func (s *Trades) Bytes() []byte {
-	return (*(*[24]byte)(unsafe.Pointer(s)))[0:]
-}
-func (s *Trades) Mut() *TradesMut {
-	return (*TradesMut)(unsafe.Pointer(s))
-}
-func (s *Trades) Count() int64 {
-	return s.count
-}
-func (s *Trades) Min() int64 {
-	return s.min
-}
-func (s *Trades) Max() int64 {
-	return s.max
-}
-
-type TradesMut struct {
-	Trades
-}
-
-func (s *TradesMut) Clone() *TradesMut {
-	v := &TradesMut{}
-	*v = *s
-	return v
-}
-func (s *TradesMut) Freeze() *Trades {
-	return (*Trades)(unsafe.Pointer(s))
-}
-func (s *TradesMut) SetCount(v int64) *TradesMut {
-	s.count = v
-	return s
-}
-func (s *TradesMut) SetMin(v int64) *TradesMut {
-	s.min = v
-	return s
-}
-func (s *TradesMut) SetMax(v int64) *TradesMut {
-	s.max = v
 	return s
 }
 
@@ -618,116 +671,106 @@ func (s *BarMut) SetInterest(v *Volume) *BarMut {
 	return s
 }
 
-type Trade struct {
-	id        int64
-	price     float64
-	quantity  float64
-	aggressor Aggressor
-	_         [4]byte // Padding
+type Trades struct {
+	count int64
+	min   int64
+	max   int64
 }
 
-func (s *Trade) String() string {
+func (s *Trades) String() string {
 	return fmt.Sprintf("%v", s.MarshalMap(nil))
 }
 
-func (s *Trade) MarshalMap(m map[string]interface{}) map[string]interface{} {
+func (s *Trades) MarshalMap(m map[string]interface{}) map[string]interface{} {
 	if m == nil {
 		m = make(map[string]interface{})
 	}
-	m["id"] = s.Id()
-	m["price"] = s.Price()
-	m["quantity"] = s.Quantity()
-	m["aggressor"] = s.Aggressor()
+	m["count"] = s.Count()
+	m["min"] = s.Min()
+	m["max"] = s.Max()
 	return m
 }
 
-func (s *Trade) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, (*(*[32]byte)(unsafe.Pointer(s)))[0:])
+func (s *Trades) ReadFrom(r io.Reader) (int64, error) {
+	n, err := io.ReadFull(r, (*(*[24]byte)(unsafe.Pointer(s)))[0:])
 	if err != nil {
 		return int64(n), err
 	}
-	if n != 32 {
+	if n != 24 {
 		return int64(n), io.ErrShortBuffer
 	}
 	return int64(n), nil
 }
-func (s *Trade) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write((*(*[32]byte)(unsafe.Pointer(s)))[0:])
+func (s *Trades) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write((*(*[24]byte)(unsafe.Pointer(s)))[0:])
 	return int64(n), err
 }
-func (s *Trade) MarshalBinaryTo(b []byte) []byte {
-	return append(b, (*(*[32]byte)(unsafe.Pointer(s)))[0:]...)
+func (s *Trades) MarshalBinaryTo(b []byte) []byte {
+	return append(b, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...)
 }
-func (s *Trade) MarshalBinary() ([]byte, error) {
+func (s *Trades) MarshalBinary() ([]byte, error) {
 	var v []byte
-	return append(v, (*(*[32]byte)(unsafe.Pointer(s)))[0:]...), nil
+	return append(v, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...), nil
 }
-func (s *Trade) Read(b []byte) (n int, err error) {
-	if len(b) < 32 {
+func (s *Trades) Read(b []byte) (n int, err error) {
+	if len(b) < 24 {
 		return -1, io.ErrShortBuffer
 	}
-	v := (*Trade)(unsafe.Pointer(&b[0]))
+	v := (*Trades)(unsafe.Pointer(&b[0]))
 	*v = *s
-	return 32, nil
+	return 24, nil
 }
-func (s *Trade) UnmarshalBinary(b []byte) error {
-	if len(b) < 32 {
+func (s *Trades) UnmarshalBinary(b []byte) error {
+	if len(b) < 24 {
 		return io.ErrShortBuffer
 	}
-	v := (*Trade)(unsafe.Pointer(&b[0]))
+	v := (*Trades)(unsafe.Pointer(&b[0]))
 	*s = *v
 	return nil
 }
-func (s *Trade) Clone() *Trade {
-	v := &Trade{}
+func (s *Trades) Clone() *Trades {
+	v := &Trades{}
 	*v = *s
 	return v
 }
-func (s *Trade) Bytes() []byte {
-	return (*(*[32]byte)(unsafe.Pointer(s)))[0:]
+func (s *Trades) Bytes() []byte {
+	return (*(*[24]byte)(unsafe.Pointer(s)))[0:]
 }
-func (s *Trade) Mut() *TradeMut {
-	return (*TradeMut)(unsafe.Pointer(s))
+func (s *Trades) Mut() *TradesMut {
+	return (*TradesMut)(unsafe.Pointer(s))
 }
-func (s *Trade) Id() int64 {
-	return s.id
+func (s *Trades) Count() int64 {
+	return s.count
 }
-func (s *Trade) Price() float64 {
-	return s.price
+func (s *Trades) Min() int64 {
+	return s.min
 }
-func (s *Trade) Quantity() float64 {
-	return s.quantity
-}
-func (s *Trade) Aggressor() Aggressor {
-	return s.aggressor
+func (s *Trades) Max() int64 {
+	return s.max
 }
 
-type TradeMut struct {
-	Trade
+type TradesMut struct {
+	Trades
 }
 
-func (s *TradeMut) Clone() *TradeMut {
-	v := &TradeMut{}
+func (s *TradesMut) Clone() *TradesMut {
+	v := &TradesMut{}
 	*v = *s
 	return v
 }
-func (s *TradeMut) Freeze() *Trade {
-	return (*Trade)(unsafe.Pointer(s))
+func (s *TradesMut) Freeze() *Trades {
+	return (*Trades)(unsafe.Pointer(s))
 }
-func (s *TradeMut) SetId(v int64) *TradeMut {
-	s.id = v
+func (s *TradesMut) SetCount(v int64) *TradesMut {
+	s.count = v
 	return s
 }
-func (s *TradeMut) SetPrice(v float64) *TradeMut {
-	s.price = v
+func (s *TradesMut) SetMin(v int64) *TradesMut {
+	s.min = v
 	return s
 }
-func (s *TradeMut) SetQuantity(v float64) *TradeMut {
-	s.quantity = v
-	return s
-}
-func (s *TradeMut) SetAggressor(v Aggressor) *TradeMut {
-	s.aggressor = v
+func (s *TradesMut) SetMax(v int64) *TradesMut {
+	s.max = v
 	return s
 }
 
@@ -834,149 +877,106 @@ func (s *SpreadMut) SetAvg(v float64) *SpreadMut {
 	return s
 }
 
-// Greeks are financial measures of the sensitivity of an option’s price to its
-// underlying determining parameters, such as volatility or the price of the underlying
-// asset. The Greeks are utilized in the analysis of an options portfolio and in sensitivity
-// analysis of an option or portfolio of options. The measures are considered essential by
-// many investors for making informed decisions in options trading.
-//
-// Delta, Gamma, Vega, Theta, and Rho are the key option Greeks. However, there are many other
-// option Greeks that can be derived from those mentioned above.
-type Greeks struct {
-	iv    float64
-	delta float64
-	gamma float64
-	vega  float64
-	theta float64
-	rho   float64
+type Ticks struct {
+	total int64
+	up    int64
+	down  int64
 }
 
-func (s *Greeks) String() string {
+func (s *Ticks) String() string {
 	return fmt.Sprintf("%v", s.MarshalMap(nil))
 }
 
-func (s *Greeks) MarshalMap(m map[string]interface{}) map[string]interface{} {
+func (s *Ticks) MarshalMap(m map[string]interface{}) map[string]interface{} {
 	if m == nil {
 		m = make(map[string]interface{})
 	}
-	m["iv"] = s.Iv()
-	m["delta"] = s.Delta()
-	m["gamma"] = s.Gamma()
-	m["vega"] = s.Vega()
-	m["theta"] = s.Theta()
-	m["rho"] = s.Rho()
+	m["total"] = s.Total()
+	m["up"] = s.Up()
+	m["down"] = s.Down()
 	return m
 }
 
-func (s *Greeks) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, (*(*[48]byte)(unsafe.Pointer(s)))[0:])
+func (s *Ticks) ReadFrom(r io.Reader) (int64, error) {
+	n, err := io.ReadFull(r, (*(*[24]byte)(unsafe.Pointer(s)))[0:])
 	if err != nil {
 		return int64(n), err
 	}
-	if n != 48 {
+	if n != 24 {
 		return int64(n), io.ErrShortBuffer
 	}
 	return int64(n), nil
 }
-func (s *Greeks) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write((*(*[48]byte)(unsafe.Pointer(s)))[0:])
+func (s *Ticks) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write((*(*[24]byte)(unsafe.Pointer(s)))[0:])
 	return int64(n), err
 }
-func (s *Greeks) MarshalBinaryTo(b []byte) []byte {
-	return append(b, (*(*[48]byte)(unsafe.Pointer(s)))[0:]...)
+func (s *Ticks) MarshalBinaryTo(b []byte) []byte {
+	return append(b, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...)
 }
-func (s *Greeks) MarshalBinary() ([]byte, error) {
+func (s *Ticks) MarshalBinary() ([]byte, error) {
 	var v []byte
-	return append(v, (*(*[48]byte)(unsafe.Pointer(s)))[0:]...), nil
+	return append(v, (*(*[24]byte)(unsafe.Pointer(s)))[0:]...), nil
 }
-func (s *Greeks) Read(b []byte) (n int, err error) {
-	if len(b) < 48 {
+func (s *Ticks) Read(b []byte) (n int, err error) {
+	if len(b) < 24 {
 		return -1, io.ErrShortBuffer
 	}
-	v := (*Greeks)(unsafe.Pointer(&b[0]))
+	v := (*Ticks)(unsafe.Pointer(&b[0]))
 	*v = *s
-	return 48, nil
+	return 24, nil
 }
-func (s *Greeks) UnmarshalBinary(b []byte) error {
-	if len(b) < 48 {
+func (s *Ticks) UnmarshalBinary(b []byte) error {
+	if len(b) < 24 {
 		return io.ErrShortBuffer
 	}
-	v := (*Greeks)(unsafe.Pointer(&b[0]))
+	v := (*Ticks)(unsafe.Pointer(&b[0]))
 	*s = *v
 	return nil
 }
-func (s *Greeks) Clone() *Greeks {
-	v := &Greeks{}
+func (s *Ticks) Clone() *Ticks {
+	v := &Ticks{}
 	*v = *s
 	return v
 }
-func (s *Greeks) Bytes() []byte {
-	return (*(*[48]byte)(unsafe.Pointer(s)))[0:]
+func (s *Ticks) Bytes() []byte {
+	return (*(*[24]byte)(unsafe.Pointer(s)))[0:]
 }
-func (s *Greeks) Mut() *GreeksMut {
-	return (*GreeksMut)(unsafe.Pointer(s))
+func (s *Ticks) Mut() *TicksMut {
+	return (*TicksMut)(unsafe.Pointer(s))
 }
-func (s *Greeks) Iv() float64 {
-	return s.iv
+func (s *Ticks) Total() int64 {
+	return s.total
 }
-func (s *Greeks) Delta() float64 {
-	return s.delta
+func (s *Ticks) Up() int64 {
+	return s.up
 }
-func (s *Greeks) Gamma() float64 {
-	return s.gamma
-}
-func (s *Greeks) Vega() float64 {
-	return s.vega
-}
-func (s *Greeks) Theta() float64 {
-	return s.theta
-}
-func (s *Greeks) Rho() float64 {
-	return s.rho
+func (s *Ticks) Down() int64 {
+	return s.down
 }
 
-// Greeks are financial measures of the sensitivity of an option’s price to its
-// underlying determining parameters, such as volatility or the price of the underlying
-// asset. The Greeks are utilized in the analysis of an options portfolio and in sensitivity
-// analysis of an option or portfolio of options. The measures are considered essential by
-// many investors for making informed decisions in options trading.
-//
-// Delta, Gamma, Vega, Theta, and Rho are the key option Greeks. However, there are many other
-// option Greeks that can be derived from those mentioned above.
-type GreeksMut struct {
-	Greeks
+type TicksMut struct {
+	Ticks
 }
 
-func (s *GreeksMut) Clone() *GreeksMut {
-	v := &GreeksMut{}
+func (s *TicksMut) Clone() *TicksMut {
+	v := &TicksMut{}
 	*v = *s
 	return v
 }
-func (s *GreeksMut) Freeze() *Greeks {
-	return (*Greeks)(unsafe.Pointer(s))
+func (s *TicksMut) Freeze() *Ticks {
+	return (*Ticks)(unsafe.Pointer(s))
 }
-func (s *GreeksMut) SetIv(v float64) *GreeksMut {
-	s.iv = v
+func (s *TicksMut) SetTotal(v int64) *TicksMut {
+	s.total = v
 	return s
 }
-func (s *GreeksMut) SetDelta(v float64) *GreeksMut {
-	s.delta = v
+func (s *TicksMut) SetUp(v int64) *TicksMut {
+	s.up = v
 	return s
 }
-func (s *GreeksMut) SetGamma(v float64) *GreeksMut {
-	s.gamma = v
-	return s
-}
-func (s *GreeksMut) SetVega(v float64) *GreeksMut {
-	s.vega = v
-	return s
-}
-func (s *GreeksMut) SetTheta(v float64) *GreeksMut {
-	s.theta = v
-	return s
-}
-func (s *GreeksMut) SetRho(v float64) *GreeksMut {
-	s.rho = v
+func (s *TicksMut) SetDown(v int64) *TicksMut {
+	s.down = v
 	return s
 }
 
@@ -1442,26 +1442,31 @@ func init() {
 		}
 	}
 
+	a(Trade{}, TradeMut{}, 32, []b{
+		{"id", 0, 8},
+		{"price", 8, 8},
+		{"quantity", 16, 8},
+		{"aggressor", 24, 4},
+		{"_", 28, 4},
+	})
 	a(Candle{}, CandleMut{}, 32, []b{
 		{"open", 0, 8},
 		{"high", 8, 8},
 		{"low", 16, 8},
 		{"close", 24, 8},
 	})
-	a(Ticks{}, TicksMut{}, 24, []b{
-		{"total", 0, 8},
-		{"up", 8, 8},
-		{"down", 16, 8},
+	a(Greeks{}, GreeksMut{}, 48, []b{
+		{"iv", 0, 8},
+		{"delta", 8, 8},
+		{"gamma", 16, 8},
+		{"vega", 24, 8},
+		{"theta", 32, 8},
+		{"rho", 40, 8},
 	})
 	a(Volume{}, VolumeMut{}, 24, []b{
 		{"total", 0, 8},
 		{"buy", 8, 8},
 		{"sell", 16, 8},
-	})
-	a(Trades{}, TradesMut{}, 24, []b{
-		{"count", 0, 8},
-		{"min", 8, 8},
-		{"max", 16, 8},
 	})
 	a(Bar{}, BarMut{}, 208, []b{
 		{"start", 0, 8},
@@ -1474,25 +1479,20 @@ func init() {
 		{"volume", 160, 24},
 		{"interest", 184, 24},
 	})
-	a(Trade{}, TradeMut{}, 32, []b{
-		{"id", 0, 8},
-		{"price", 8, 8},
-		{"quantity", 16, 8},
-		{"aggressor", 24, 4},
-		{"_", 28, 4},
+	a(Trades{}, TradesMut{}, 24, []b{
+		{"count", 0, 8},
+		{"min", 8, 8},
+		{"max", 16, 8},
 	})
 	a(Spread{}, SpreadMut{}, 24, []b{
 		{"low", 0, 8},
 		{"high", 8, 8},
 		{"avg", 16, 8},
 	})
-	a(Greeks{}, GreeksMut{}, 48, []b{
-		{"iv", 0, 8},
-		{"delta", 8, 8},
-		{"gamma", 16, 8},
-		{"vega", 24, 8},
-		{"theta", 32, 8},
-		{"rho", 40, 8},
+	a(Ticks{}, TicksMut{}, 24, []b{
+		{"total", 0, 8},
+		{"up", 8, 8},
+		{"down", 16, 8},
 	})
 	a(OptionBar{}, OptionBarMut{}, 256, []b{
 		{"start", 0, 8},

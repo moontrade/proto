@@ -1,15 +1,20 @@
 package schema
 
+// Struct represent a fixed sized memory layout similar to how structs memory layout
+// in languages such as Go, Rust, C/C++, etc. Optionally structs can be compact which
+// removes all padding which favors memory size vs CPU cache aligning. For variable
+// memory sizes, use Record.
 type Struct struct {
 	Name      string
 	Type      *Type
-	Fields    []*Field
-	FieldMap  map[string]*Field
-	Optionals []*Field
+	Fields    []*StructField
+	FieldMap  map[string]*StructField
+	Optionals []*StructField
 	Version   int64
+	Compact   bool
 }
 
-type Field struct {
+type StructField struct {
 	Number    int
 	Struct    *Struct
 	Name      string

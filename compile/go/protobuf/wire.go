@@ -16,14 +16,14 @@ import (
 	"math/bits"
 )
 
-// Number represents the field number.
-type Number int32
+// FieldNumber represents the field number.
+type FieldNumber int32
 
 const (
-	MinValidNumber      Number = 1
-	FirstReservedNumber Number = 19000
-	LastReservedNumber  Number = 19999
-	MaxValidNumber      Number = 1<<29 - 1
+	MinValidNumber      FieldNumber = 1
+	FirstReservedNumber FieldNumber = 19000
+	LastReservedNumber  FieldNumber = 19999
+	MaxValidNumber      FieldNumber = 1<<29 - 1
 )
 
 // IsValid reports whether the field number is semantically valid.
@@ -31,20 +31,20 @@ const (
 // Note that while numbers within the reserved range are semantically invalid,
 // they are syntactically valid in the wire format.
 // Implementations may treat records with reserved field numbers as unknown.
-func (n Number) IsValid() bool {
+func (n FieldNumber) IsValid() bool {
 	return MinValidNumber <= n && n < FirstReservedNumber || LastReservedNumber < n && n <= MaxValidNumber
 }
 
-// Type represents the wire type.
-type Type int8
+// ProtobufType represents the wire type.
+type ProtobufType int8
 
 const (
-	VarintType     Type = 0
-	Fixed32Type    Type = 5
-	Fixed64Type    Type = 1
-	BytesType      Type = 2
-	StartGroupType Type = 3
-	EndGroupType   Type = 4
+	VarintType     ProtobufType = 0
+	Fixed32Type    ProtobufType = 5
+	Fixed64Type    ProtobufType = 1
+	BytesType      ProtobufType = 2
+	StartGroupType ProtobufType = 3
+	EndGroupType   ProtobufType = 4
 )
 
 const (
@@ -92,7 +92,7 @@ func ParseError(n int) error {
 //
 // The total length includes the tag header and the end group marker (if the
 // field is a group).
-func ConsumeField(b []byte) (Number, Type, int) {
+func ConsumeField(b []byte) (FieldNumber, ProtobufType, int) {
 	num, typ, n := ConsumeTag(b)
 	if n < 0 {
 		return 0, 0, n // forward error code
@@ -105,12 +105,12 @@ func ConsumeField(b []byte) (Number, Type, int) {
 }
 
 // ConsumeFieldValue parses a field value and returns its length.
-// This assumes that the field Number and wire Type have already been parsed.
+// This assumes that the field FieldNumber and wire ProtobufType have already been parsed.
 // This returns a negative length upon an error (see ParseError).
 //
 // When parsing a group, the length includes the end group marker and
 // the end group is verified to match the starting field number.
-func ConsumeFieldValue(num Number, typ Type, b []byte) (n int) {
+func ConsumeFieldValue(num FieldNumber, typ ProtobufType, b []byte) (n int) {
 	switch typ {
 	case VarintType:
 		_, n = ConsumeVarint(b)
@@ -153,13 +153,13 @@ func ConsumeFieldValue(num Number, typ Type, b []byte) (n int) {
 }
 
 // AppendTag encodes num and typ as a varint-encoded tag and appends it to b.
-func AppendTag(b []byte, num Number, typ Type) []byte {
+func AppendTag(b []byte, num FieldNumber, typ ProtobufType) []byte {
 	return AppendVarint(b, EncodeTag(num, typ))
 }
 
 // ConsumeTag parses b as a varint-encoded tag, reporting its length.
 // This returns a negative length upon an error (see ParseError).
-func ConsumeTag(b []byte) (Number, Type, int) {
+func ConsumeTag(b []byte) (FieldNumber, ProtobufType, int) {
 	v, n := ConsumeVarint(b)
 	if n < 0 {
 		return 0, 0, n // forward error code
@@ -171,7 +171,7 @@ func ConsumeTag(b []byte) (Number, Type, int) {
 	return num, typ, n
 }
 
-func SizeTag(num Number) int {
+func SizeTag(num FieldNumber) int {
 	return SizeVarint(EncodeTag(num, 0)) // wire type has no effect on size
 }
 
@@ -458,7 +458,7 @@ func ConsumeString(b []byte) (v string, n int) {
 
 // AppendGroup appends v to b as group value, with a trailing end group marker.
 // The value v must not contain the end marker.
-func AppendGroup(b []byte, num Number, v []byte) []byte {
+func AppendGroup(b []byte, num FieldNumber, v []byte) []byte {
 	return AppendVarint(append(b, v...), EncodeTag(num, EndGroupType))
 }
 
@@ -466,7 +466,7 @@ func AppendGroup(b []byte, num Number, v []byte) []byte {
 // and verifies that the end marker matches the provided num. The value v
 // does not contain the end marker, while the length does contain the end marker.
 // This returns a negative length upon an error (see ParseError).
-func ConsumeGroup(num Number, b []byte) (v []byte, n int) {
+func ConsumeGroup(num FieldNumber, b []byte) (v []byte, n int) {
 	n = ConsumeFieldValue(num, StartGroupType, b)
 	if n < 0 {
 		return nil, n // forward error code
@@ -485,23 +485,23 @@ func ConsumeGroup(num Number, b []byte) (v []byte, n int) {
 }
 
 // SizeGroup returns the encoded size of a group, given only the length.
-func SizeGroup(num Number, n int) int {
+func SizeGroup(num FieldNumber, n int) int {
 	return n + SizeTag(num)
 }
 
-// DecodeTag decodes the field Number and wire Type from its unified form.
-// The Number is -1 if the decoded field number overflows int32.
+// DecodeTag decodes the field FieldNumber and wire ProtobufType from its unified form.
+// The FieldNumber is -1 if the decoded field number overflows int32.
 // Other than overflow, this does not check for field number validity.
-func DecodeTag(x uint64) (Number, Type) {
+func DecodeTag(x uint64) (FieldNumber, ProtobufType) {
 	// NOTE: MessageSet allows for larger field numbers than normal.
 	if x>>3 > uint64(math.MaxInt32) {
 		return -1, 0
 	}
-	return Number(x >> 3), Type(x & 7)
+	return FieldNumber(x >> 3), ProtobufType(x & 7)
 }
 
-// EncodeTag encodes the field Number and wire Type into its unified form.
-func EncodeTag(num Number, typ Type) uint64 {
+// EncodeTag encodes the field FieldNumber and wire ProtobufType into its unified form.
+func EncodeTag(num FieldNumber, typ ProtobufType) uint64 {
 	return uint64(num)<<3 | uint64(typ&7)
 }
 

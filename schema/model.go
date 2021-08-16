@@ -61,7 +61,7 @@ const (
 )
 
 var (
-	emptyOptionals = make([]*Field, 0, 0)
+	emptyOptionals = make([]*StructField, 0, 0)
 )
 
 type Nil struct{}
@@ -147,7 +147,7 @@ type Optional struct {
 	Mask   byte
 }
 
-func (f *Field) IsOptional() bool {
+func (f *StructField) IsOptional() bool {
 	return f.Type != nil && f.Type.Optional
 }
 

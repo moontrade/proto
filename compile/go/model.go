@@ -111,7 +111,7 @@ type goStruct struct {
 }
 
 type goField struct {
-	field     *Field
+	field     *StructField
 	isPointer bool
 	public    string // Name of public accessor
 	private   string // Name of field if declared inside a struct

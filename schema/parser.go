@@ -340,6 +340,14 @@ func (p *Parser) Parse() (*File, error) {
 
 				break loop
 
+			// message
+			case 'm':
+				return nil, p.error(fmt.Sprintf("invalid syntax '%s'", line))
+
+			// record
+			case 'r':
+				return nil, p.error(fmt.Sprintf("invalid syntax '%s'", line))
+
 			default:
 				return nil, p.error(fmt.Sprintf("invalid syntax '%s'", line))
 			}
@@ -1440,7 +1448,7 @@ func (p *Parser) parseStruct(line string, comments []string) (*Struct, error) {
 			state = StateNumberOrName
 			mark = 0
 			count = 0
-			field := &Field{
+			field := &StructField{
 				Struct: st,
 			}
 		loop:
