@@ -65,6 +65,7 @@ func loadFromFS(dirOrFile string) (*Schema, error) {
 			if len(rel) == 0 {
 				return nil
 			}
+
 			if rel[0] == os.PathSeparator {
 				rel = rel[1:]
 			}

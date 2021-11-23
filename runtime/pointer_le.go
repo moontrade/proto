@@ -1,10 +1,11 @@
-// +build 386 amd64 arm arm64 ppc64le mips64le mipsle riscv64 wasm
+//go:build 386 || amd64 || arm || arm64 || ppc64le || mips64le || mipsle || riscv64 || wasm || tinygo.wasm
+// +build 386 amd64 arm arm64 ppc64le mips64le mipsle riscv64 wasm tinygo.wasm
 
 package runtime
 
 import (
-	"fmt"
 	"github.com/moontrade/proto/runtime/internal/pmath"
+	"math"
 	"reflect"
 	"unsafe"
 )
@@ -13,9 +14,11 @@ const (
 	EmptyString = ""
 )
 
+// Pointer is a fat pointer
 type Pointer struct {
 	ptr unsafe.Pointer
-	len int
+	len uint16
+	cap uint16
 }
 
 func (p Pointer) Unsafe() unsafe.Pointer {
@@ -23,7 +26,7 @@ func (p Pointer) Unsafe() unsafe.Pointer {
 }
 
 func (p Pointer) Len() int {
-	return p.len
+	return int(p.len)
 }
 
 func NewPointer(size int) Pointer {
@@ -37,14 +40,14 @@ func NewPointerMut(size int) PointerMut {
 func Wrap(b []byte) Pointer {
 	return Pointer{
 		ptr: unsafe.Pointer(&b[0]),
-		len: len(b),
+		len: uint16(len(b)),
 	}
 }
 
 func WrapMut(b []byte) PointerMut {
 	return PointerMut{Pointer{
 		ptr: unsafe.Pointer(&b[0]),
-		len: len(b),
+		len: uint16(len(b)),
 	}}
 }
 
@@ -52,7 +55,7 @@ func WrapString(s string) Pointer {
 	h := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	return Pointer{
 		ptr: unsafe.Pointer(h.Data),
-		len: len(s),
+		len: uint16(len(s)),
 	}
 }
 
@@ -60,7 +63,7 @@ func WrapStringMut(s string) PointerMut {
 	h := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	return PointerMut{Pointer{
 		ptr: unsafe.Pointer(h.Data),
-		len: len(s),
+		len: uint16(len(s)),
 	}}
 }
 
@@ -70,7 +73,7 @@ func (p Pointer) String() string {
 	}
 	return *(*string)(unsafe.Pointer(&reflect.StringHeader{
 		Data: uintptr(p.ptr),
-		Len:  p.len,
+		Len:  int(p.len),
 	}))
 }
 
@@ -80,28 +83,32 @@ func (p Pointer) Bytes() []byte {
 	}
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(p.ptr),
-		Len:  p.len,
-		Cap:  p.len,
+		Len:  int(p.len),
+		Cap:  int(p.len),
 	}))
 }
 
-func (p Pointer) Grow(extra int) PointerMut {
+func (p Pointer) Grow(extra int) int {
 	if extra <= 0 {
-		panic(fmt.Errorf("Pointer.Grow supplied negative extra: %d", extra))
+		return -1
+		//panic(fmt.Errorf("Pointer.Grow supplied negative extra: %d", extra))
 	}
-	dst := GetBytes(pmath.CeilToPowerOfTwo(p.len + extra))
+	newLen := pmath.CeilToPowerOfTwo(int(p.len) + extra)
+	if newLen > math.MaxUint16 {
+		return -1
+		//panic(fmt.Sprintf("pointer exceeds max size of 64k: %d", newLen))
+	}
+	dst := GetBytes(pmath.CeilToPowerOfTwo(int(p.len) + extra))
+
 	src := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(p.ptr),
-		Len:  p.len,
-		Cap:  p.len,
+		Len:  int(p.len),
+		Cap:  int(p.len),
 	}))
 	copy(dst, src)
-	return PointerMut{
-		Pointer: Pointer{
-			ptr: unsafe.Pointer(&dst[0]),
-			len: len(dst),
-		},
-	}
+	p.ptr = unsafe.Pointer(&dst[0])
+	p.cap = uint16(len(dst))
+	return int(p.len)
 }
 
 func (p Pointer) IsNil() bool {
@@ -113,7 +120,7 @@ func (p Pointer) IsEmpty() bool {
 }
 
 func (p Pointer) CheckBounds(offset int) bool {
-	return uintptr(p.ptr) == 0 || p.len < offset
+	return uintptr(p.ptr) == 0 || int(p.len) < offset
 }
 
 func (p Pointer) Int8Unsafe(offset int) int8 {
@@ -228,12 +235,13 @@ func (p Pointer) Slice(offset, length int) Pointer {
 	if p.IsNil() {
 		return Pointer{}
 	}
-	if offset+length > p.len {
+	if offset+length > int(p.len) {
 		return Pointer{}
 	}
 	return Pointer{
-		ptr: unsafe.Pointer(uintptr(p.ptr) + uintptr(offset)),
-		len: length,
+		//ptr: unsafe.Pointer(uintptr(p.ptr) + uintptr(offset)),
+		ptr: unsafe.Add(p.ptr, offset),
+		len: uint16(length),
 	}
 }
 
@@ -541,8 +549,11 @@ func (p PointerMut) SetStringFixed(offset, max int, value string) {
 		*(*byte)(unsafe.Pointer(uintptr(p.ptr) + uintptr(offset+max-sizeBytes))) = byte(length)
 	case 2:
 		end := uintptr(offset + max - sizeBytes)
-		*(*byte)(unsafe.Pointer(uintptr(p.ptr) + end)) = byte(length)
-		*(*byte)(unsafe.Pointer(uintptr(p.ptr) + end + 1)) = byte(length >> 8)
+
+		*(*byte)(unsafe.Add(p.ptr, end)) = byte(length)
+		*(*byte)(unsafe.Add(p.ptr, end+1)) = byte(length)
+		//*(*byte)(unsafe.Pointer(uintptr(p.ptr) + end)) = byte(length)
+		//*(*byte)(unsafe.Pointer(uintptr(p.ptr) + end + 1)) = byte(length >> 8)
 	case 3:
 		end := uintptr(offset + max - sizeBytes)
 		*(*byte)(unsafe.Pointer(uintptr(p.ptr) + end)) = byte(length)
@@ -611,4 +622,32 @@ func (p PointerMut) SetSize(offset int, size int32) int {
 
 func (p PointerMut) SetVarString(offset int, value string) {
 
+}
+
+func (p PointerMut) append(value string) int {
+	if int(p.cap-p.len) < len(value) {
+		p.Grow(len(value))
+	}
+	if int(p.len)+len(value) > math.MaxUint16 {
+		return -1
+	}
+	i := p.len
+	p.len += uint16(len(value))
+	return int(i)
+}
+
+func (p PointerMut) Ensure(length int) int {
+	if int(p.cap) < length {
+		return p.Grow(length)
+	}
+	return int(p.len)
+}
+
+func (p PointerMut) Reserve(length int) int {
+	if int(p.cap-p.len) < length {
+		p.Grow(length)
+	}
+	i := p.len
+	p.len += uint16(length)
+	return int(i)
 }

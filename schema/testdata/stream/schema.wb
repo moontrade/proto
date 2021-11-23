@@ -1,7 +1,7 @@
 enum StreamKind : byte {
-	Log = 0
-	TimeSeries = 1
-	Table = 2
+	Log 		= 0
+	TimeSeries 	= 1
+	Table 		= 2
 }
 
 enum SchemaKind : byte {
@@ -52,8 +52,8 @@ struct BlockID {
 }
 
 enum Compression : byte {
-	None = 0
-	LZ4 = 1
+	None 	= 0
+	LZ4 	= 1
 }
 
 // BlockHeader
@@ -78,44 +78,44 @@ struct BlockHeader {
 
 // Block64
 struct Block64 {
-	head		BlockHeader		// Header
-	body		bytes65456		// Data
+	head	BlockHeader		// Header
+	body	bytes65456		// Data
 }
 
 // Block32
 struct Block32 {
-	head		BlockHeader		// Header
-	body		bytes32688		// Data
+	head	BlockHeader		// Header
+	body	bytes32688		// Data
 }
 
 // Block16
 struct Block16 {
-	head		BlockHeader		// Header
-	body		bytes16306		// Data
+	head	BlockHeader		// Header
+	body	bytes16306		// Data
 }
 
 // Block8
 struct Block8 {
-	head		BlockHeader		// Header
-	body		bytes8112		// Data
+	head	BlockHeader		// Header
+	body	bytes8112		// Data
 }
 
 // Block4
 struct Block4 {
-	head		BlockHeader		// Header
-	body		bytes4016		// Data
+	head	BlockHeader		// Header
+	body	bytes4016		// Data
 }
 
 // Block2
 struct Block2 {
-	head		BlockHeader		// Header
-	body		bytes1968		// Data
+	head	BlockHeader		// Header
+	body	bytes1968		// Data
 }
 
 // Block1
 struct Block1 {
-	head		BlockHeader		// Header
-	body		bytes944		// Data
+	head	BlockHeader		// Header
+	body	bytes944		// Data
 }
 
 struct RecordID {

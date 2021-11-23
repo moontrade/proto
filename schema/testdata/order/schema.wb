@@ -5,3 +5,15 @@ import (
 struct Order {
 	candle pricing.Candle
 }
+
+protocol Trade {
+
+}
+
+send Events {
+
+}
+
+push Events {
+
+}

@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	pool sync.Pool = sync.Pool{
+	pool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]string)
 		},

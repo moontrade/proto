@@ -6,7 +6,6 @@ import (
 
 type Builder struct {
 	PointerMut
-	i int
 }
 
 func NewBuilder(size int) *Builder {
@@ -15,38 +14,13 @@ func NewBuilder(size int) *Builder {
 	}
 }
 
-func (b *Builder) append(value string) int {
-	if b.len-b.i < len(value) {
-		b.PointerMut = b.Grow(len(value))
-	}
-	i := b.i
-	b.i += len(value)
-	return i
-}
-
-func (b *Builder) Ensure(length int) *Builder {
-	if b.len < length {
-		b.PointerMut = b.Grow(length)
-	}
-	return b
-}
-
-func (b *Builder) Reserve(length int) int {
-	if b.len-b.i < length {
-		b.PointerMut = b.Grow(length)
-	}
-	i := b.i
-	b.i += length
-	return i
-}
-
-func (b *Builder) AppendStringFixed(max int, value string) *Builder {
-	b.Ensure(b.i + max)
-	i := b.i
-	b.i += max
-	b.SetStringFixed(i, max, value)
-	return b
-}
+//func (b *Builder) AppendStringFixed(max int, value string) *Builder {
+//	b.Ensure(int(b.len) + max)
+//	i := b.len
+//	b.len += max
+//	b.SetStringFixed(i, max, value)
+//	return b
+//}
 
 //func (b *Builder) AppendBytesFixed(max int, value []byte) *Builder {
 //	b.Ensure(b.i + max)

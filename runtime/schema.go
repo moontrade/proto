@@ -29,8 +29,7 @@ const (
 )
 
 const (
-	VPointerSize    = 4
-	VPointerBigSize = 8
+	VPointerSize = int32(2)
 )
 
 func Int64Field(name string, offset int32) Field {
@@ -86,6 +85,13 @@ func ListFixedElement(max int32, element Field) Field {
 	}
 }
 
+type RecordLayout int32
+
+const (
+	RecordLayoutCompact      RecordLayout = 0
+	RecordLayoutCacheAligned RecordLayout = 1
+)
+
 type Record struct {
 	Name      string            `json:"name"`
 	Comments  []string          `json:"comments"`
@@ -94,6 +100,7 @@ type Record struct {
 	fieldsMap map[string]*Field `json:"-"`
 	Version   int64             `json:"version"`
 	Size      int32             `json:"size"`
+	Layout    RecordLayout      `json:"layout,omitempty"`
 	Flex      bool              `json:"flex"` // Does Record have any variable fields?
 }
 
@@ -142,12 +149,14 @@ type Field struct {
 	Name      string   `json:"name"`
 	ShortName string   `json:"shortName"`
 	Comments  []string `json:"comments"`
-	Record    *Record  `json:"record"` // oneof
-	List      *List    `json:"list"`   // oneof
-	Map       *Map     `json:"map"`    // oneof
-	Union     *Union   `json:"union"`  // oneof
+	Record    *Record  `json:"record,omitempty"` // oneof
+	List      *List    `json:"list,omitempty"`   // oneof
+	Map       *Map     `json:"map,omitempty"`    // oneof
+	Union     *Union   `json:"union,omitempty"`  // oneof
+	Enum      *Enum    `json:"enum,omitempty"`
 	Offset    int32    `json:"offset"`
-	Size      int32    `json:"size"` // Number of bytes
+	Size      int32    `json:"size"`  // Number of bytes
+	Align     int32    `json:"align"` // Number of bytes
 	Number    uint16   `json:"number"`
 	Kind      Kind     `json:"kind"`
 	Optional  bool     `json:"optional"`
@@ -193,10 +202,29 @@ func FixedStringLengthBytes(size int) int {
 	}
 }
 
+type Enum struct {
+	Name    string       `json:"name"`
+	Options []EnumOption `json:"options"`
+	Kind    Kind         `json:"kind"`
+}
+
+type EnumOption struct {
+	Name   string `json:"name"`
+	Value  int64  `json:"value"`
+	ValueU uint64 `json:"valueU,omitempty"`
+}
+
 type Schema struct {
+	FQN        string         `json:"fqn"`
+	Name       string         `json:"name"`
 	Records    []Record       `json:"records"`
 	RecordsMap map[string]int `json:"recordsMap"`
 	Lists      []List         `json:"lists"`
+}
+
+type Import struct {
+	FQN  string `json:"fqn"`
+	Name string `json:"name"`
 }
 
 func init() {

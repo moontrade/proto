@@ -11,7 +11,7 @@ type ListPointer struct {
 }
 
 func TestAlloc(t *testing.T) {
-	fmt.Println(unsafe.Sizeof(ListPointer{}))
+	println("sizeof<Pointer>", unsafe.Sizeof(Pointer{}))
 	p := GetPointerMut(128)
 	p.SetBytes(8, []byte("hello"))
 
