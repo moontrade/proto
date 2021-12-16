@@ -13,7 +13,7 @@ var (
 
 const (
 	maxDepth   = 10
-	FileSuffix = ".moon"
+	FileSuffix = ".wap"
 )
 
 type File struct {

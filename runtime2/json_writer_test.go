@@ -1,4 +1,4 @@
-package runtime
+package runtime2
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 func TestJsonWriter(t *testing.T) {
 	w := JsonWriter{
 		W: Buffer{
-			b: GetBytes(1024),
+			b: make([]byte, 1024),
 		},
 	}
 

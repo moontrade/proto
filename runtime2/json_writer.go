@@ -1,8 +1,8 @@
 // Package jwriter contains a JSON writer.
-package runtime
+package runtime2
 
 import (
-	"strconv"
+	"github.com/moontrade/nogc"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -18,7 +18,7 @@ const (
 
 // JsonWriter is a JSON writer.
 type JsonWriter struct {
-	W            Buffer
+	W            nogc.Bytes
 	Flags        JsonWriterFlags
 	Error        error
 	NoEscapeHTML bool
@@ -26,7 +26,7 @@ type JsonWriter struct {
 
 // Size returns the size of the data that was written out.
 func (w *JsonWriter) Size() int {
-	return w.W.i
+	return w.W.Len()
 }
 
 // RawByte appends raw binary data to the buffer.
@@ -81,179 +81,129 @@ func (w *JsonWriter) Base64Bytes(data []byte) {
 }
 
 func (w *JsonWriter) Uint8(n uint8) {
-	w.W.Ensure(3)
-	b := strconv.AppendUint(w.W.b[w.W.i:w.W.i], uint64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendUInt8String(n)
 }
 
 func (w *JsonWriter) Uint16(n uint16) {
-	w.W.Ensure(5)
-	b := strconv.AppendUint(w.W.b[w.W.i:w.W.i], uint64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendUInt16String(n)
 }
 
 func (w *JsonWriter) Uint32(n uint32) {
-	w.W.Ensure(10)
-	b := strconv.AppendUint(w.W.b[w.W.i:w.W.i], uint64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendUInt32String(n)
 }
 
 func (w *JsonWriter) Uint(n uint) {
-	w.W.Ensure(20)
-	b := strconv.AppendUint(w.W.b[w.W.i:w.W.i], uint64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendUIntString(n)
 }
 
 func (w *JsonWriter) Uint64(n uint64) {
-	w.W.Ensure(20)
-	b := strconv.AppendUint(w.W.b[w.W.i:w.W.i], uint64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendUInt64String(n)
 }
 
 func (w *JsonWriter) Int8(n int8) {
-	w.W.Ensure(4)
-	b := strconv.AppendInt(w.W.b[w.W.i:w.W.i], int64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendInt8String(n)
 }
 
 func (w *JsonWriter) Int16(n int16) {
-	w.W.Ensure(6)
-	b := strconv.AppendInt(w.W.b[w.W.i:w.W.i], int64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendInt16String(n)
 }
 
 func (w *JsonWriter) Int32(n int32) {
-	w.W.Ensure(11)
-	b := strconv.AppendInt(w.W.b[w.W.i:w.W.i], int64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendInt32String(n)
 }
 
 func (w *JsonWriter) Int(n int) {
-	w.W.Ensure(21)
-	b := strconv.AppendInt(w.W.b[w.W.i:w.W.i], int64(n), 10)
-	w.W.i += len(b)
+	w.W.AppendIntString(n)
 }
 
 func (w *JsonWriter) Int64(n int64) {
-	w.W.Ensure(21)
-	b := strconv.AppendInt(w.W.b[w.W.i:w.W.i], n, 10)
-	w.W.i += len(b)
+	w.W.AppendInt64String(n)
 }
 
 func (w *JsonWriter) Uint8Str(n uint8) {
-	w.W.Ensure(5)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUInt8String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Uint16Str(n uint16) {
-	w.W.Ensure(7)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUInt16String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Uint32Str(n uint32) {
-	w.W.Ensure(12)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUInt32String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) UintStr(n uint) {
-	w.W.Ensure(22)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUIntString(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Uint64Str(n uint64) {
-	w.W.Ensure(22)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUInt64String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) UintptrStr(n uintptr) {
-	w.W.Ensure(22)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendUint(w.W.b[w.W.i+1:w.W.i+1], uint64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendUInt64String(uint64(n))
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Int8Str(n int8) {
-	w.W.Ensure(6)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendInt(w.W.b[w.W.i+1:w.W.i+1], int64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendInt8String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Int16Str(n int16) {
-	w.W.Ensure(8)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendInt(w.W.b[w.W.i+1:w.W.i+1], int64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendInt16String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Int32Str(n int32) {
-	w.W.Ensure(13)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendInt(w.W.b[w.W.i+1:w.W.i+1], int64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendInt32String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) IntStr(n int) {
-	w.W.Ensure(23)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendInt(w.W.b[w.W.i+1:w.W.i+1], int64(n), 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendIntString(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Int64Str(n int64) {
-	w.W.Ensure(23)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendInt(w.W.b[w.W.i+1:w.W.i+1], n, 10)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendInt64String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Float32(n float32) {
-	w.W.Ensure(20)
-	b := strconv.AppendFloat(w.W.b[w.W.i:w.W.i], float64(n), 'g', -1, 32)
-	w.W.i += len(b)
+	w.W.AppendFloat32String(n)
 }
 
 func (w *JsonWriter) Float32Str(n float32) {
-	w.W.Ensure(22)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendFloat(w.W.b[w.W.i+1:w.W.i+1], float64(n), 'g', -1, 32)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendFloat32String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Float64(n float64) {
-	w.W.Ensure(20)
-	b := strconv.AppendFloat(w.W.b[w.W.i:w.W.i], n, 'g', -1, 64)
-	w.W.i += len(b)
+	w.W.AppendFloat64String(n)
 }
 
 func (w *JsonWriter) Float64Str(n float64) {
-	w.W.Ensure(22)
-	w.W.b[w.W.i] = '"'
-	b := strconv.AppendFloat(w.W.b[w.W.i+1:w.W.i+1], n, 'g', -1, 64)
-	w.W.b[w.W.i+len(b)+1] = '"'
-	w.W.i += 2 + len(b)
+	w.W.AppendByte('"')
+	w.W.AppendFloat64String(n)
+	w.W.AppendByte('"')
 }
 
 func (w *JsonWriter) Bool(v bool) {
@@ -364,7 +314,7 @@ func (w *JsonWriter) base64(in []byte) {
 		return
 	}
 
-	w.W.Ensure(((len(in)-1)/3 + 1) * 4)
+	w.W.EnsureCap(w.W.Len() + ((len(in)-1)/3+1)*4)
 
 	si := 0
 	n := (len(in) / 3) * 3
@@ -373,12 +323,10 @@ func (w *JsonWriter) base64(in []byte) {
 		// Convert 3x 8bit source bytes into 4 bytes
 		val := uint(in[si+0])<<16 | uint(in[si+1])<<8 | uint(in[si+2])
 
-		w.W.b[w.W.i] = encode[val>>18&0x3F]
-		w.W.b[w.W.i+1] = encode[val>>12&0x3F]
-		w.W.b[w.W.i+2] = encode[val>>6&0x3F]
-		w.W.b[w.W.i+3] = encode[val&0x3F]
-		w.W.i += 4
-		//w.Buffer.Buf = append(w.Buffer.Buf, encode[val>>18&0x3F], encode[val>>12&0x3F], encode[val>>6&0x3F], encode[val&0x3F])
+		w.W.AppendByte(encode[val>>18&0x3F])
+		w.W.AppendByte(encode[val>>12&0x3F])
+		w.W.AppendByte(encode[val>>6&0x3F])
+		w.W.AppendByte(encode[val&0x3F])
 
 		si += 3
 	}
@@ -394,21 +342,15 @@ func (w *JsonWriter) base64(in []byte) {
 		val |= uint(in[si+1]) << 8
 	}
 
-	w.W.b[w.W.i] = encode[val>>18&0x3F]
-	w.W.b[w.W.i+1] = encode[val>>12&0x3F]
-	w.W.i += 2
-	//w.Buffer.Buf = append(w.Buffer.Buf, encode[val>>18&0x3F], encode[val>>12&0x3F])
+	w.W.AppendByte(encode[val>>18&0x3F])
+	w.W.AppendByte(encode[val>>12&0x3F])
 
 	switch remain {
 	case 2:
-		w.W.b[w.W.i] = encode[val>>6&0x3F]
-		w.W.b[w.W.i+1] = byte(padChar)
-		w.W.i += 2
-		//w.Buffer.Buf = append(w.Buffer.Buf, encode[val>>6&0x3F], byte(padChar))
+		w.W.AppendByte(encode[val>>6&0x3F])
+		w.W.AppendByte(byte(padChar))
 	case 1:
-		w.W.b[w.W.i] = byte(padChar)
-		w.W.b[w.W.i+1] = byte(padChar)
-		w.W.i += 2
-		//w.Buffer.Buf = append(w.Buffer.Buf, byte(padChar), byte(padChar))
+		w.W.AppendByte(byte(padChar))
+		w.W.AppendByte(byte(padChar))
 	}
 }

@@ -18,6 +18,7 @@ type StructField struct {
 	Number    int
 	Struct    *Struct
 	Name      string
+	Short     string
 	Type      *Type
 	Offset    int
 	OptOffset int

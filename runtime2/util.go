@@ -2,10 +2,10 @@
 // easyjson_nounsafe nor appengine build tag is set. See README notes
 // for more details.
 
-//+build !easyjson_nounsafe
-//+build !appengine
+//go:build !easyjson_nounsafe && !appengine
+// +build !easyjson_nounsafe,!appengine
 
-package runtime
+package runtime2
 
 import (
 	"unsafe"

@@ -12,7 +12,7 @@ func TestNewGenerator(t *testing.T) {
 		p        *Schema
 		compiler *Compiler
 	)
-	p, err = LoadFromFS("./testdata", true)
+	p, err = LoadFromFS("../../schema2", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,8 +21,8 @@ func TestNewGenerator(t *testing.T) {
 		BigEndian: false,
 		Fluent:    true,
 		Mutable:   true,
-		Package:   "github.com/moontrade/proto/compile/go/testdata",
-		Output:    "./testdata",
+		Package:   "github.com/moontrade/proto",
+		Output:    "../../schema2",
 	}); err != nil {
 		t.Fatal(err)
 	}

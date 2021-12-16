@@ -1,3 +1,4 @@
+//go:build !race
 // +build !race
 
 // When -race is enabled, sync.Pool is a no-op,

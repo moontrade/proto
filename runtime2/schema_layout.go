@@ -1,4 +1,4 @@
-package runtime
+package runtime2
 
 func (l RecordLayout) Layout(record *Record) {
 	switch l {

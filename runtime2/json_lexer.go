@@ -2,7 +2,7 @@
 //
 // It is expected that it is mostly used with generated parser code, so the interface is tuned
 // for a parser that knows what kind of data is expected.
-package runtime
+package runtime2
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/moontrade/proto/runtime/intern"
+	"github.com/moontrade/proto/runtime2/intern"
 )
 
 // jsonLexerTokenKind determines type of a token.
@@ -288,8 +288,8 @@ func (r *JsonLexer) unescapeStringToken() (err error) {
 		}
 
 		if unescapedData == nil {
-			//unescapedData = make([]byte, 0, len(r.token.byteValue))
-			unescapedData = GetBytes(len(data))[:0]
+			unescapedData = make([]byte, 0, len(r.token.byteValue))
+			//unescapedData = GetBytes(len(data))[:0]
 		}
 
 		var d [4]byte

@@ -1,4 +1,8 @@
-package runtime
+package runtime2
+
+import (
+	"github.com/moontrade/nogc"
+)
 
 type Kind byte
 
@@ -19,6 +23,7 @@ const (
 	KindStringFixed = Kind(13)
 	KindBytes       = Kind(14)
 	KindFixed       = Kind(15)
+	KindTimeRange   = Kind(16)
 	KindEnum        = Kind(20) // User-defined enum
 	KindRecord      = Kind(30) // User-defined record
 	KindStruct      = Kind(31) // User-defined fixed sized record
@@ -33,6 +38,9 @@ const (
 )
 
 func Int64Field(name string, offset int32) Field {
+	return Field{Name: name, Offset: offset, Size: 8, Kind: KindInt64}
+}
+func Int64FieldNamed(name, short string, offset int32) Field {
 	return Field{Name: name, Offset: offset, Size: 8, Kind: KindInt64}
 }
 func UInt64Field(name string, offset int32) Field {
@@ -53,7 +61,9 @@ func StringFixedElement(name string, offset, max int32) Field {
 func ListField(name string, offset int32, element Field) Field {
 	return Field{
 		Name:   name,
-		Offset: offset, Size: 8, Kind: KindList,
+		Offset: offset,
+		Size:   8,
+		Kind:   KindList,
 		List: &List{
 			Element: element,
 		},
@@ -61,7 +71,8 @@ func ListField(name string, offset int32, element Field) Field {
 }
 func ListElement(element Field) Field {
 	return Field{
-		Size: 8, Kind: KindList,
+		Size: 8,
+		Kind: KindList,
 		List: &List{
 			Element: element,
 		},
@@ -85,6 +96,22 @@ func ListFixedElement(max int32, element Field) Field {
 	}
 }
 
+type LogRecordHeader interface {
+	RecordID() int64
+
+	Timestamp() int64
+
+	Size() int
+}
+
+type SeriesRecordHeader interface {
+	LogRecordHeader
+
+	Start() int64
+
+	End() int64
+}
+
 type RecordLayout int32
 
 const (
@@ -93,23 +120,34 @@ const (
 )
 
 type Record struct {
-	Name      string            `json:"name"`
-	Comments  []string          `json:"comments"`
-	Fields    []Field           `json:"fields"`
-	FieldsMap map[string]int    `json:"fieldsMap"`
-	fieldsMap map[string]*Field `json:"-"`
-	Version   int64             `json:"version"`
-	Size      int32             `json:"size"`
-	Layout    RecordLayout      `json:"layout,omitempty"`
-	Flex      bool              `json:"flex"` // Does Record have any variable fields?
+	Name         string            `json:"name"`
+	Comments     []string          `json:"comments"`
+	Fields       []Field           `json:"fields"`
+	Header       []int             `json:"header,omitempty"`
+	HeaderFields []*Field          `json:"-"`
+	FieldsMap    map[string]*Field `json:"-"`
+	Version      int64             `json:"version"`
+	Size         int32             `json:"size"`
+	Layout       RecordLayout      `json:"layout,omitempty"`
+	Flex         bool              `json:"flex"` // Does Record have any variable fields?
 }
 
 func (r *Record) Field(name string) *Field {
-	index, found := r.FieldsMap[name]
-	if !found {
-		return nil
+	m := r.FieldsMap
+	if m == nil {
+		m = make(map[string]*Field)
 	}
-	return &r.Fields[index]
+	if len(m) == 0 {
+		for i := 0; i < len(r.Fields); i++ {
+			field := &r.Fields[i]
+			m[field.Name] = field
+			if len(field.CompactName) > 0 {
+				m[field.CompactName] = field
+			}
+		}
+		r.FieldsMap = m
+	}
+	return m[name]
 }
 
 func (r *Record) FieldAt(index int) *Field {
@@ -134,9 +172,9 @@ type List struct {
 // Header: | LEN 2 bytes | SIZE 2 bytes | List<MapEntry>
 // Item: | KEY | VALUE | Distance (2 bytes)
 type Map struct {
-	Key     Field   `json:"key"`
-	Value   Field   `json:"value"`
-	Default Pointer `json:"-"`
+	Key     Field        `json:"key"`
+	Value   Field        `json:"value"`
+	Default nogc.Pointer `json:"-"`
 }
 
 // Union represents a C-like union or a protobuf oneOf
@@ -146,21 +184,21 @@ type Union struct {
 
 // Field represents a field on a Record, List Element, or Map Key/Value
 type Field struct {
-	Name      string   `json:"name"`
-	ShortName string   `json:"shortName"`
-	Comments  []string `json:"comments"`
-	Record    *Record  `json:"record,omitempty"` // oneof
-	List      *List    `json:"list,omitempty"`   // oneof
-	Map       *Map     `json:"map,omitempty"`    // oneof
-	Union     *Union   `json:"union,omitempty"`  // oneof
-	Enum      *Enum    `json:"enum,omitempty"`
-	Offset    int32    `json:"offset"`
-	Size      int32    `json:"size"`  // Number of bytes
-	Align     int32    `json:"align"` // Number of bytes
-	Number    uint16   `json:"number"`
-	Kind      Kind     `json:"kind"`
-	Optional  bool     `json:"optional"`
-	Pointer   bool     `json:"pointer"`
+	Name        string   `json:"name"`
+	CompactName string   `json:"compact"`
+	Comments    []string `json:"comments"`
+	Record      *Record  `json:"-"` // oneof
+	List        *List    `json:"-"` // oneof
+	Map         *Map     `json:"-"` // oneof
+	Union       *Union   `json:"-"` // oneof
+	Enum        *Enum    `json:"-"` // oneof
+	Offset      int32    `json:"offset"`
+	Size        int32    `json:"size"`  // Number of bytes
+	Align       int32    `json:"align"` // Number of bytes
+	Number      uint16   `json:"number"`
+	Kind        Kind     `json:"kind"`
+	Optional    bool     `json:"optional"`
+	Pointer     bool     `json:"pointer"`
 }
 
 func (f *Field) IsPointer() bool {
@@ -215,16 +253,57 @@ type EnumOption struct {
 }
 
 type Schema struct {
-	FQN        string         `json:"fqn"`
-	Name       string         `json:"name"`
-	Records    []Record       `json:"records"`
-	RecordsMap map[string]int `json:"recordsMap"`
-	Lists      []List         `json:"lists"`
+	FQN        string             `json:"fqn"`
+	Name       string             `json:"name"`
+	Records    []Record           `json:"records"`
+	RecordsMap map[string]*Record `json:"-"`
+	Lists      []List             `json:"lists"`
+	Streams    []Stream           `json:"streams"`
 }
 
 type Import struct {
 	FQN  string `json:"fqn"`
 	Name string `json:"name"`
+}
+
+type BlockLayout int32
+
+const (
+	BlockLayoutRow    BlockLayout = 0
+	BlockLayoutColumn BlockLayout = 1
+)
+
+// Stream is a special type for Streaming. It's a list of Records that fits inside
+// 1KB, 2KB, 4KB, 8KB, 16KB, 32KB or 64KB blocks.
+type Stream struct {
+	Name       string      `json:"name"`
+	RecordName string      `json:"record"`
+	Record     *Record     `json:"-"`
+	Layout     BlockLayout `json:"layout"` // Row (Arrays of Structs) or Column (Struct of Arrays *fixed only)
+}
+
+type BlockRecord struct {
+}
+
+func TimeRangeRecord() Record {
+	return Record{
+		Name: "Bar",
+		Fields: []Field{
+			Int64FieldNamed("start", "s", 0),
+			Int64FieldNamed("end", "e", 8),
+		},
+	}
+}
+
+func TimeRangeHeaderRecord() Record {
+	return Record{
+		Name: "Bar",
+		Fields: []Field{
+			Int64FieldNamed("id", "i", 0),
+			Int64FieldNamed("start", "s", 0),
+			Int64FieldNamed("end", "e", 8),
+		},
+	}
 }
 
 func init() {
@@ -238,14 +317,7 @@ func init() {
 					StringField("name", 16, 4),
 					ListField("errors", 24, ListElement(StringElement())),
 				},
-				FieldsMap: map[string]int{
-					"id":    0,
-					"start": 1,
-				},
 			},
-		},
-		RecordsMap: map[string]int{
-			"Bar": 0,
 		},
 	}
 	_ = s

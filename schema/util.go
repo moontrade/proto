@@ -46,7 +46,8 @@ func DivRoundUp(n, a uintptr) uintptr {
 }
 
 func PackageName(path string) string {
-	return filepath.Base(filepath.Dir(path))
+	p := filepath.Base(filepath.Dir(path))
+	return p
 }
 
 func Align(t *Type) int {
@@ -311,7 +312,7 @@ func ParseInt(kind Kind, v string) (interface{}, error) {
 //		buf[0] = 0
 //	}
 //	_, _ = d.Write(buf[0:1])
-//	_, _ = d.WriteString(s.Name)
+//	_, _ = d.WStr(s.Name)
 //
 //	switch s.Kind {
 //	case KindEnum:

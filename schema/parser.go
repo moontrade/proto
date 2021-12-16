@@ -105,7 +105,7 @@ func loadFromFS(dirOrFile string) (*Schema, error) {
 					return err
 				}
 
-				file, err = ParseFile(rel, name, data)
+				file, err = ParseFile(path, name, data)
 				result.Files[rel] = file
 				if err != nil {
 					if file != nil {
@@ -261,6 +261,9 @@ func (p *Parser) Parse() (*File, error) {
 					return nil, err
 				}
 				break loop
+
+			// block
+			case 'b':
 
 			// const
 			case 'c':
@@ -756,12 +759,20 @@ func (p *Parser) parseType(line string, comments []string) (t *Type, err error) 
 				err    error
 			)
 
-			if StartsWith(name, "string") {
+			if strings.HasPrefix(name, "string") {
 				kind = KindString
-				length, err = parseStringLen(name[6:])
+				if len(name[6:]) > 0 {
+					length, err = parseStringLen(name[6:])
+				} else {
+					length = 0
+				}
 			} else {
 				kind = KindBytes
-				length, err = parseStringLen(name[5:])
+				if len(name[5:]) > 0 {
+					length, err = parseStringLen(name[5:])
+				} else {
+					length = 0
+				}
 			}
 
 			if err != nil {
@@ -1272,6 +1283,10 @@ func (p *Parser) parsePackage(line string, comments []string) error {
 	return nil
 }
 
+func (p *Parser) parseBlock(line string, comments []string) {
+
+}
+
 func (p *Parser) parseConst(line string, comments []string) (*Const, error) {
 	if len(line) < 5 || line[1:5] != "onst" {
 		return nil, p.error("expected 'const' keyword")
@@ -1353,6 +1368,9 @@ func (p *Parser) parseStruct(line string, comments []string) (*Struct, error) {
 	const (
 		StateName stateCode = iota
 		StateNumberOrName
+		StateNameAfter
+		StateShortNameBegin
+		StateShortName
 		StateNumber
 		StateNumberAfter
 		StateCurlyBrace
@@ -1499,6 +1517,50 @@ func (p *Parser) parseStruct(line string, comments []string) (*Struct, error) {
 					switch c {
 					case ' ', '\t', '\r':
 						field.Name = line[mark:i]
+						state = StateNameAfter
+
+					case '|':
+						field.Name = line[mark:i]
+						state = StateShortNameBegin
+					}
+
+				case StateNameAfter:
+					switch c {
+					case ' ', '\t', '\r':
+						continue
+
+					case '|':
+						state = StateShortNameBegin
+
+					default:
+						t, err := p.parseType(line[i:], comments)
+						if err != nil {
+							return nil, err
+						}
+
+						field.Type = t
+						st.Fields = append(st.Fields, field)
+						t.Field = field
+
+						state = StateEnd
+						comments = nil
+						break loop
+					}
+
+				case StateShortNameBegin:
+					switch c {
+					case ' ', '\t', '\r':
+						continue
+
+					default:
+						mark = i
+						state = StateShortName
+					}
+
+				case StateShortName:
+					switch c {
+					case ' ', '\t', '\r':
+						field.Short = line[mark:i]
 						t, err := p.parseType(line[i:], comments)
 						if err != nil {
 							return nil, err
@@ -1618,7 +1680,7 @@ func (p *Parser) parseEnum(line string, comments []string) (*Enum, error) {
 				}
 				name := line[mark:i]
 
-				if StartsWith(name, "string") {
+				if strings.HasPrefix(name, "string") {
 					length, err := parseStringLen(name[6:])
 					if err != nil {
 						return nil, p.error("invalid string declaration: %s", err.Error())

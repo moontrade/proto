@@ -1,0 +1,150 @@
+package schema
+
+include "common.wap"
+include "order.wap"
+
+import (
+    pricing "github.com/moontrade/model/pricing" v2
+)
+
+enum Kind : byte {
+    Unknown         = 0
+    Bool            = 1
+    Byte            = 2
+    Int8            = 3
+    UInt8           = 4
+    Int16           = 5
+    UInt16          = 6
+    Int32           = 7
+    UInt32          = 8
+    Int64           = 9
+    UInt64          = 10
+    Float32         = 11
+    Float64         = 12
+    String          = 13
+    Bytes           = 14
+    RecordHeader    = 20
+    BlockHeader     = 21
+    Enum            = 30
+    Record          = 40
+    Struct          = 41
+    List            = 50
+    LinkedList      = 51
+    Map             = 52
+    LinkedMap       = 53
+}
+
+enum BlockSize : u16 {
+    B1kb  = 1024
+    B2kb  = 2048
+    B4kb  = 4096
+    B8kb  = 8192
+    B16kb = 16384
+    B32kb = 32768
+    B64kb = 65535
+}
+
+enum Format : byte {
+    Raw         = 0
+    WAP         = 1
+    Json        = 2
+    Protobuf    = 3
+}
+
+enum Encoding : byte {
+    None        = 0
+    LZ4         = 1
+    ZSTD        = 2
+    Brotli      = 3
+    Gzip        = 4
+}
+
+enum RecordLayout : byte {
+    Aligned = 0
+    Compact = 1
+}
+
+enum StreamKind : byte {
+	Log     = 0
+	Series  = 1
+	Table   = 2
+}
+
+enum BlockLayout : byte {
+    Row     = 1
+    Column  = 2
+}
+
+struct Line {
+    number  i32
+    begin   i32
+    end     i32
+}
+
+struct Imports {
+    id      i32
+    line    Line
+    //comments  [2]string64
+    list    [16]Import
+}
+
+struct Import {
+    id      i32
+    line    Line
+    path    string128
+    name    string32
+    alias   string32
+}
+
+struct Record {
+    name             string40
+    //comments         [8]string32
+    fields           [64]Field
+}
+
+struct Struct {
+    name             string40
+    //comments         [8]string32
+    fields           [64]Field
+}
+
+struct Field {
+    name            string40
+    compact         string8
+    offset          u16
+    rootOffset      u16
+    size            u16
+    align           u16
+    number          u16
+    kind            Kind
+    isOptional      bool
+    isPointer       bool
+}
+
+struct Enum {
+    name        | n     string40
+    options     | o     [16]EnumOption
+}
+
+struct EnumOption {
+    1   index       | i     i32
+    2   name        | n     string64       = "hi"
+    3   value       | v     i64
+    4   valueStr    | s     string64
+}
+
+struct Union {
+    name    string40
+    options [16]UnionOption
+}
+
+struct UnionOption {
+    name    string40
+    kind    Kind
+    id      string40
+}
+
+struct Schema {
+    imports     [16]Imports
+    records     [128]Record
+}

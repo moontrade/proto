@@ -741,12 +741,14 @@ func (c *Compiler) genEnum(file *goPackage, t *goType, b *Builder) error {
 	b.W("type %s %s\n", t.name, t.enum.value.name)
 
 	b.W("const (")
-	for i, option := range t.enum.options {
-		c.genComments(b, option.option.Comments)
-		b.W("    %s = %s(%d)", option.name, t.name, option.option.Value)
-		if i < len(t.enum.options)-1 {
-			b.W("")
+	for _, option := range t.enum.options {
+		if len(option.option.Comments) > 0 {
+			c.genComments(b, option.option.Comments)
 		}
+		b.W("    %s = %s(%d)", option.name, t.name, option.option.Value)
+		//if i < len(t.enum.options)-1 {
+		//	b.W("")
+		//}
 	}
 	b.W(")\n")
 	return nil
@@ -798,6 +800,10 @@ func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Build
 	b.W("    *v = *s")
 	b.W("    return v")
 	b.W("}\n")
+
+	if strings.HasSuffix(t.mut, "_") {
+		t.mut = t.mut[0 : len(t.mut)-2]
+	}
 
 	if !mut {
 		b.W("func (s *%s) String() string {", name)
@@ -910,6 +916,8 @@ func (c *Compiler) genStructBytes(file *goPackage, t *goType, mut bool, b *Build
 		b.W("    return nil")
 		b.W("}")
 
+		t.mut = fmt.Sprintf("%sMut", t.name)
+
 		b.W("func (s *%s) Mut() *%s {", t.name, t.mut)
 		b.W("    return (*%s)(unsafe.Pointer(&s[0]))", t.mut)
 		b.W("}")
@@ -952,8 +960,12 @@ func (c *Compiler) genStructFieldGetter(mut bool, b *Builder, st *goType, f *goF
 	fieldName := f.public
 	typeName := f.t.name
 	if mut && len(f.t.mut) > 0 {
+
 		typeName = f.t.mut
 	}
+	//if strings.HasSuffix(typeName, "_") {
+	//	typeName = typeName[0:len(typeName)-1]
+	//}
 
 	getBuffer := "s"
 	if mut {
@@ -1295,6 +1307,9 @@ func (c *Compiler) genStruct(file *goPackage, t *goType, mut bool, b *Builder, o
 			if mut {
 				if field.isPointer {
 					if field.t.name != field.t.mut {
+						if strings.HasSuffix(field.t.mut, "_") {
+							field.t.mut = field.t.mut[0 : len(field.t.mut)-1]
+						}
 						W("func (s *%s) %s() *%s {", t.mut, field.public, field.t.mut)
 						W("    return s.%s.Mut()", field.private)
 						W("}")
@@ -1334,6 +1349,9 @@ func (c *Compiler) genArrayList(t *goType, mut bool, b *Builder, order binary.By
 	W := b.W
 
 	if mut {
+		if strings.HasSuffix(t.mut, "_") {
+			t.mut = t.mut[0 : len(t.mut)-1]
+		}
 		W("type %s struct {", t.mut)
 		W("    %s", t.name)
 		W("}")
